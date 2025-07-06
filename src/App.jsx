@@ -75,6 +75,7 @@ function App() {
 
   return (
     <>
+      <ToastContainer position="top-right" autoClose={2000} />
       <div
         style={{
           position: "fixed",
@@ -105,7 +106,7 @@ function App() {
           />
         </svg>
       </div>
-      {/* ✅ Show Navbar only for authenticated users and protected pages */}
+      {/* Show Navbar only for authenticated users and protected pages */}
       {isAuthenticated &&
         !["/", "/register", "/verify-email"].includes(location.pathname) && (
           <Navbar onLogout={handleLogout} />
@@ -172,8 +173,6 @@ function App() {
           />
         </Routes>
       </div>
-
-      <ToastContainer position="top-right" autoClose={2000} />
     </>
   );
 }
