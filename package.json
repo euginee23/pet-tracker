@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.18.3",
+    "@turf/turf": "^7.2.0",
     "axios": "^1.10.0",
     "bootstrap": "^5.3.5",
     "jwt-decode": "^4.0.0",

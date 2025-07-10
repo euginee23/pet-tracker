@@ -12,10 +12,11 @@ import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import "@geoman-io/leaflet-geoman-free";
 import "leaflet-geometryutil";
-
-import { io } from "socket.io-client";
+import * as turf from "@turf/turf";
 
 import { useTracker } from "../utils/TrackerContext";
+
+import SelectDeviceModal from "../modals/SelectDeviceModal";
 
 import markerRed from "../assets/markers/marker-icon-red.png";
 import markerBlue from "../assets/markers/marker-icon-blue.png";
@@ -91,13 +92,17 @@ const MapAutoCenter = ({ position, onCenter }) => {
   return null;
 };
 
-const GeomanControls = ({ setGeofenceLayers, mapRef }) => {
+const GeomanControls = ({
+  setGeofenceLayers,
+  mapRef,
+  setShowDeviceModal,
+  setPendingGeofence,
+}) => {
   const map = useMap();
   const previewLayerRef = useRef(null);
   const polygonPoints = useRef([]);
   const currentShape = useRef(null);
 
-  // ✅ Load saved geofences
   useEffect(() => {
     const loadGeofences = async () => {
       try {
@@ -142,7 +147,7 @@ const GeomanControls = ({ setGeofenceLayers, mapRef }) => {
 
           if (layer) {
             newLayers.push(layer);
-            layer.addTo(map); // 🟢 Add to current map
+            layer.addTo(map);
           }
         });
 
@@ -156,7 +161,6 @@ const GeomanControls = ({ setGeofenceLayers, mapRef }) => {
     if (map) loadGeofences();
   }, [map, setGeofenceLayers]);
 
-  // 🛠 Setup drawing tools and listeners
   useEffect(() => {
     map.pm.addControls({
       position: "topright",
@@ -228,80 +232,39 @@ const GeomanControls = ({ setGeofenceLayers, mapRef }) => {
       const layer = e.layer;
       const shape = e.shape;
 
-      let user = null;
-      let device = null;
+      const rawUser = localStorage.getItem("user");
+      let userId = null;
 
       try {
-        const rawUser = localStorage.getItem("user");
-        const rawDevice = localStorage.getItem("selectedDevice");
-
-        if (rawUser) {
-          const parsedUser = JSON.parse(rawUser);
-          user = { user_id: parsedUser.user_id || parsedUser.userId };
-        }
-
-        if (rawDevice) {
-          const parsedDevice = JSON.parse(rawDevice);
-          device = {
-            ...parsedDevice,
-            device_id: parsedDevice.device_id || parsedDevice.deviceId,
-          };
-        }
+        const parsed = rawUser ? JSON.parse(rawUser) : null;
+        userId = parsed?.user_id || parsed?.userId;
       } catch (err) {
-        console.warn("⚠️ Error parsing user/device:", err.message);
+        console.warn("⚠️ Error parsing user info:", err.message);
       }
 
-      const deviceId = device?.device_id || device?.deviceId;
-      if (!user?.user_id || !deviceId) {
-        alert("Missing user or device");
+      if (!userId) {
+        alert("Missing user information.");
+        layer.remove();
         return;
       }
 
-      const geofenceData = {
-        user_id: user.user_id,
-        device_id: deviceId,
-        type: shape,
-      };
-
-      if (shape.toLowerCase() === "circle" && layer instanceof L.Circle) {
-        const center = layer.getLatLng();
-        geofenceData.center_lat = center.lat;
-        geofenceData.center_lng = center.lng;
-        geofenceData.radius = layer.getRadius();
-      } else if (
-        (shape === "Polygon" || shape === "Rectangle") &&
-        layer instanceof L.Polygon
-      ) {
-        const latlngs = layer.getLatLngs?.();
-        const coords =
-          Array.isArray(latlngs) && Array.isArray(latlngs[0])
-            ? latlngs[0].map((p) => [p.lat, p.lng])
-            : [];
-
-        if (coords.length > 0) {
-          geofenceData.poly_rect = JSON.stringify(coords);
-        } else {
-          console.warn("⚠️ Polygon coordinates empty — not saving.");
-          return;
-        }
+      if (shape.toLowerCase() === "circle" && !(layer instanceof L.Circle)) {
+        alert("Invalid circle data.");
+        layer.remove();
+        return;
       }
 
-      fetch(`${import.meta.env.VITE_SOCKET_API}/api/geofences`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(geofenceData),
-      })
-        .then((res) => res.json())
-        .then((result) => {
-          console.log("✅ Geofence saved:", result);
-        })
-        .catch((err) => {
-          console.error("❌ Error saving geofence:", err);
-        });
+      if (
+        (shape === "Polygon" || shape === "Rectangle") &&
+        !(layer instanceof L.Polygon)
+      ) {
+        alert("Invalid polygon or rectangle.");
+        layer.remove();
+        return;
+      }
 
-      setGeofenceLayers((prev) => [...prev, layer]);
+      setPendingGeofence({ shape, layer, userId });
+      setShowDeviceModal(true);
       clearPreview();
     });
 
@@ -318,7 +281,7 @@ const GeomanControls = ({ setGeofenceLayers, mapRef }) => {
   return null;
 };
 
-const MapView = () => {
+const MapView = ({ layoutMode = "mobile" }) => {
   const { devices } = useTracker();
   const latestDevice = devices?.length > 0 ? devices[devices.length - 1] : null;
 
@@ -329,6 +292,9 @@ const MapView = () => {
   const [hasCentered, setHasCentered] = useState(false);
   const [, setDistanceFromGeofence] = useState(null);
   const [showMapOptions, setShowMapOptions] = useState(false);
+
+  const [showDeviceModal, setShowDeviceModal] = useState(false);
+  const [pendingGeofence, setPendingGeofence] = useState(null);
 
   useEffect(() => {
     console.log("✅ devices from context:", devices);
@@ -386,33 +352,49 @@ const MapView = () => {
           if (layer instanceof L.Circle) {
             const center = layer.getLatLng();
             const radius = layer.getRadius();
-            const distToCenter = latlng.distanceTo(center);
-            isInside = distToCenter <= radius;
-            distance = isInside ? 0 : distToCenter - radius;
+
+            const point = turf.point([device.lng, device.lat]);
+            const circle = turf.circle(
+              [center.lng, center.lat],
+              radius / 1000, // convert meters to km
+              {
+                steps: 64,
+                units: "kilometers",
+              }
+            );
+
+            isInside = turf.booleanPointInPolygon(point, circle);
+            if (!isInside) {
+              const options = { units: "meters" };
+              distance =
+                turf.distance(point, turf.center(circle), options) - radius;
+            }
           } else if (layer instanceof L.Polygon) {
-            isInside = layer.getLatLngs()[0]
-              ? L.polygon(layer.getLatLngs()).getBounds().contains(latlng)
-              : false;
+            const latlngs = layer.getLatLngs()[0];
+            let coords = latlngs.map((p) => [p.lng, p.lat]);
+
+            // Ensure the polygon is closed
+            if (
+              coords.length > 2 &&
+              (coords[0][0] !== coords[coords.length - 1][0] ||
+                coords[0][1] !== coords[coords.length - 1][1])
+            ) {
+              coords.push(coords[0]);
+            }
+
+            const polygon = turf.polygon([coords]);
+            const point = turf.point([device.lng, device.lat]);
+
+            isInside = turf.booleanPointInPolygon(point, polygon);
 
             if (!isInside) {
-              const polygonLatLngs = layer.getLatLngs()[0] || [];
-              let minDist = Infinity;
-
-              for (let i = 0; i < polygonLatLngs.length; i++) {
-                const p1 = L.latLng(polygonLatLngs[i]);
-                const p2 = L.latLng(
-                  polygonLatLngs[(i + 1) % polygonLatLngs.length]
-                );
-                const segDist = L.GeometryUtil.distanceSegment(
-                  map,
-                  latlng,
-                  p1,
-                  p2
-                );
-                if (segDist < minDist) minDist = segDist;
-              }
-
-              distance = minDist;
+              const nearestPoint = turf.nearestPointOnLine(
+                turf.lineString(coords),
+                point
+              );
+              distance = turf.distance(point, nearestPoint, {
+                units: "meters",
+              });
             }
           }
 
@@ -534,12 +516,26 @@ const MapView = () => {
   return (
     <div
       style={{
-        maxWidth: "1200px",
-        margin: "0 auto",
+        width: "100%",
+        maxWidth: layoutMode === "mobile" ? "1200px" : "100%",
+        margin: layoutMode === "mobile" ? "1rem auto" : "0",
         padding: "1rem",
-        backgroundColor: "rgba(33, 33, 33, 0.7)",
-        borderRadius: "12px",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.05)",
+        height: layoutMode === "mobile" ? "auto" : "calc(90vh - 90px)",
+        display: "flex",
+        flexDirection: "column",
+        borderRadius: "10px",
+        overflow: "hidden",
+        fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+        border: "1px solid #2e2e2e",
+        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.2)",
+        backgroundImage: `
+          radial-gradient(at top left, #2c2c2c, #1e1e1e),
+          url('https://www.transparenttextures.com/patterns/asfalt-dark.png')
+        `,
+        backgroundBlendMode: "overlay",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        color: "#fff",
       }}
     >
       <div
@@ -595,7 +591,7 @@ const MapView = () => {
                 style={{
                   fontSize: "0.8rem",
                   fontWeight: "bold",
-                  color: "#444",
+                  color: "#333",
                   marginBottom: "0.5rem",
                   paddingLeft: "0.25rem",
                 }}
@@ -623,7 +619,13 @@ const MapView = () => {
                     transition: "all 0.2s",
                   }}
                 >
-                  <div style={{ fontWeight: "bold", fontSize: "0.9rem" }}>
+                  <div
+                    style={{
+                      fontWeight: "bold",
+                      fontSize: "0.9rem",
+                      color: "#666",
+                    }}
+                  >
                     {layer.name}
                   </div>
                   <div style={{ fontSize: "0.75rem", color: "#666" }}>
@@ -675,13 +677,18 @@ const MapView = () => {
         scrollWheelZoom={true}
         ref={mapRef}
         style={{
-          height: "50vh",
+          height: layoutMode === "mobile" ? "50vh" : "calc(80vh - 80px)",
           width: "100%",
           borderRadius: "10px",
           transformOrigin: "top left",
         }}
       >
-        <GeomanControls setGeofenceLayers={setGeofenceLayers} />
+        <GeomanControls
+          setGeofenceLayers={setGeofenceLayers}
+          mapRef={mapRef}
+          setShowDeviceModal={setShowDeviceModal}
+          setPendingGeofence={setPendingGeofence}
+        />
 
         <TileLayer
           attribution={tileLayers[activeTile].attribution}
@@ -813,6 +820,73 @@ const MapView = () => {
           );
         })}
       </MapContainer>
+
+      <SelectDeviceModal
+        show={showDeviceModal}
+        devices={devices}
+        onClose={() => {
+          setShowDeviceModal(false);
+          pendingGeofence?.layer.remove();
+          setPendingGeofence(null);
+        }}
+        onConfirm={(selectedDevice) => {
+          const rawUser = localStorage.getItem("user");
+          const parsedUser = rawUser ? JSON.parse(rawUser) : null;
+          const userId = parsedUser?.user_id || parsedUser?.userId;
+
+          if (!userId) return alert("Missing user info");
+
+          const { shape, layer } = pendingGeofence;
+
+          const geofenceData = {
+            user_id: userId,
+            device_id: selectedDevice.deviceId || selectedDevice.device_id,
+            geofence_name: selectedDevice.geofenceName,
+            type: shape,
+          };
+
+          if (shape.toLowerCase() === "circle" && layer instanceof L.Circle) {
+            const center = layer.getLatLng();
+            geofenceData.center_lat = center.lat;
+            geofenceData.center_lng = center.lng;
+            geofenceData.radius = layer.getRadius();
+          } else if (
+            (shape === "Polygon" || shape === "Rectangle") &&
+            layer instanceof L.Polygon
+          ) {
+            const latlngs = layer.getLatLngs?.();
+            const coords =
+              Array.isArray(latlngs) && Array.isArray(latlngs[0])
+                ? latlngs[0].map((p) => [p.lat, p.lng])
+                : [];
+
+            if (coords.length > 0) {
+              geofenceData.poly_rect = JSON.stringify(coords);
+            } else {
+              console.warn("⚠️ Empty polygon");
+              return;
+            }
+          }
+
+          fetch(`${import.meta.env.VITE_SOCKET_API}/api/geofences`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(geofenceData),
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              console.log("✅ Geofence saved via modal:", data);
+              setGeofenceLayers((prev) => [...prev, layer]);
+              setShowDeviceModal(false);
+              setPendingGeofence(null);
+            })
+            .catch((err) => {
+              console.error("❌ Save failed:", err);
+              layer.remove();
+              setShowDeviceModal(false);
+            });
+        }}
+      />
     </div>
   );
 };

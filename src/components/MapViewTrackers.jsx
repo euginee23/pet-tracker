@@ -16,7 +16,7 @@ function formatDuration(ms) {
 
 const CHECK_INTERVAL = 10000;
 
-const MapViewTrackers = () => {
+const MapViewTrackers = ({ layoutMode = "mobile" }) => {
   const socket = useRef(null);
   const { devices, setDevices } = useTracker();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 480);
@@ -28,13 +28,10 @@ const MapViewTrackers = () => {
 
   const [simulating, setSimulating] = useState(true);
 
-  const SIM_IMAGES = {
-    "sim-001": "/pet-1.png",
-    "sim-002": "/pet-2.jpg",
-    "sim-003": "/pet-3.jpg",
-    "sim-004": "/pet-4.jpg",
-    "sim-005": "/pet-5.jpg",
-  };
+  const [savedReady, setSavedReady] = useState(false);
+  const [socketReady, setSocketReady] = useState(false);
+  const loading = !savedReady || !socketReady;
+  const [savedTrackers, setSavedTrackers] = useState([]);
 
   const GRADIENTS = [
     `radial-gradient(circle at 20% 30%, #b3e5fc, transparent 50%),
@@ -62,14 +59,6 @@ const MapViewTrackers = () => {
    radial-gradient(circle at 60% 80%, #d84315, transparent 50%),
    linear-gradient(135deg, #fbe9e7, #ffab91)`,
   ];
-
-  const SIM_NAMES = {
-    "sim-001": "Wil Fred",
-    "sim-002": "Tedd",
-    "sim-003": "Aljun",
-    "sim-004": "Jonnel",
-    "sim-005": "Bubbles",
-  };
 
   const SIM_IDS = ["sim-001", "sim-002", "sim-003", "sim-004", "sim-005"];
 
@@ -127,16 +116,17 @@ const MapViewTrackers = () => {
     socket.current.on("devices", (deviceList) => {
       const now = Date.now();
 
-      const formatted = deviceList.map((d) => {
+      const liveMap = {};
+      deviceList.forEach((d) => {
         const isOnline = now - d.lastSeen <= CHECK_INTERVAL;
-
         if (isOnline && !firstSeenRef.current[d.deviceId]) {
           firstSeenRef.current[d.deviceId] = d.lastSeen;
         }
 
-        return {
-          ...d,
-          petName: SIM_NAMES[d.deviceId] || "Unknown",
+        liveMap[d.deviceId] = {
+          lat: d.lat,
+          lng: d.lng,
+          battery: d.battery,
           online: isOnline,
           status: isOnline
             ? `Online: ${formatDuration(
@@ -146,14 +136,65 @@ const MapViewTrackers = () => {
         };
       });
 
-      const filtered = formatted.filter((d) =>
+      const finalDevices = savedTrackers.map((tracker) => {
+        const live = liveMap[tracker.device_id];
+
+        return {
+          deviceId: tracker.device_id,
+          petName: tracker.pet_name,
+          petType: tracker.pet_type,
+          petBreed: tracker.pet_breed,
+          petImage: tracker.pet_image,
+          lat: live?.lat ?? 0,
+          lng: live?.lng ?? 0,
+          battery: live?.battery ?? 0,
+          online: live?.online ?? false,
+          status: live?.status ?? "Offline",
+        };
+      });
+
+      const filtered = finalDevices.filter((d) =>
         visibleTrackerIds.includes(d.deviceId)
       );
+
       setDevices(filtered);
+      setSocketReady(true);
     });
+
     return () => {
       socket.current?.disconnect();
       console.log("🛑 Socket disconnected");
+    };
+  }, [savedTrackers, visibleTrackerIds]);
+
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.innerHTML = `
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  `;
+    document.head.appendChild(style);
+
+    const storedUser = localStorage.getItem("user");
+    const userId =
+      JSON.parse(storedUser || "{}")?.user_id ||
+      JSON.parse(storedUser || "{}")?.userId;
+
+    if (!userId) return;
+
+    fetch(`${import.meta.env.VITE_SOCKET_API}/api/trackers/${userId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setSavedTrackers(data);
+        setVisibleTrackerIds(data.map((t) => t.device_id));
+        setSavedReady(true);
+      })
+      .catch((err) => console.error("❌ Failed to fetch saved trackers:", err));
+
+    return () => {
+      document.head.removeChild(style);
     };
   }, []);
 
@@ -161,7 +202,7 @@ const MapViewTrackers = () => {
     fetch(`${import.meta.env.VITE_SOCKET_API}/simulate-movement`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceIds: ["sim-001"], start: true }),
+      body: JSON.stringify({ deviceIds: ["sim-002"], start: true }),
     })
       .then((res) => res.json())
       .then((data) => {
@@ -176,17 +217,20 @@ const MapViewTrackers = () => {
     <div
       style={{
         width: "100%",
-        maxWidth: "1200px",
-        margin: "1rem auto",
+        maxWidth: layoutMode === "mobile" ? "1200px" : "300px",
+        margin: layoutMode === "mobile" ? "1rem auto" : "0",
+        height: layoutMode === "mobile" ? "auto" : "calc(90vh - 90px)",
+        display: "flex",
+        flexDirection: "column",
         borderRadius: "10px",
         overflow: "hidden",
         fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
         border: "1px solid #2e2e2e",
         boxShadow: "0 8px 24px rgba(0, 0, 0, 0.2)",
         backgroundImage: `
-      radial-gradient(at top left, #2c2c2c, #1e1e1e),
-      url('https://www.transparenttextures.com/patterns/asfalt-dark.png')
-    `,
+          radial-gradient(at top left, #2c2c2c, #1e1e1e),
+          url('https://www.transparenttextures.com/patterns/asfalt-dark.png')
+        `,
         backgroundBlendMode: "overlay",
         backgroundSize: "cover",
         backgroundPosition: "center",
@@ -210,6 +254,7 @@ const MapViewTrackers = () => {
         }}
       >
         <span>Your Trackers</span>
+
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button
             onClick={() => toggleSimulation(true)}
@@ -250,188 +295,222 @@ const MapViewTrackers = () => {
           flexWrap: "wrap",
           gap: "0.75rem",
           justifyContent: isMobile ? "center" : "flex-start",
+          overflowY: layoutMode === "mobile" ? "unset" : "auto",
+          overflowX: "hidden",
+          maxHeight: layoutMode === "mobile" ? "none" : "100%",
+          minHeight: 0,
+          boxSizing: "border-box",
+          alignContent: "flex-start",
         }}
       >
-        {devices.map((device, index) => {
-          const isOnline = device?.online === true;
-
-          return (
+        {loading ? (
+          <div style={{ padding: "2rem", textAlign: "center", width: "100%" }}>
             <div
-              key={device.deviceId}
               style={{
-                flex: "1 1 calc(50% - 0.75rem)",
-                maxWidth: isMobile ? "calc(50% - 0.75rem)" : "170px",
-                aspectRatio: isMobile ? "auto" : "1 / 1",
-                minHeight: isMobile ? "170px" : undefined,
-                borderRadius: "10px",
-                background: GRADIENTS[index % GRADIENTS.length],
-                backgroundBlendMode: "screen",
-                color: "rgba(33, 33, 33, 0.75)",
-                fontFamily: "Segoe UI, sans-serif",
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                padding: "1rem",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-                position: "relative",
-                opacity: isOnline ? 1 : 0.5,
-                transition: "all 0.3s ease",
+                border: "4px solid rgba(255, 255, 255, 0.1)",
+                borderTop: "4px solid #fff",
+                borderRadius: "50%",
+                width: "32px",
+                height: "32px",
+                margin: "0 auto",
+                animation: "spin 0.8s linear infinite",
               }}
+            ></div>
+            <p
+              style={{ marginTop: "0.5rem", color: "#ccc", fontSize: "0.9rem" }}
             >
-              {/* Status Dot */}
-              <div
-                style={{
-                  position: "absolute",
-                  top: "8px",
-                  right: "8px",
-                  width: "12px",
-                  height: "12px",
-                  borderRadius: "50%",
-                  backgroundColor: isOnline ? "#4caf50" : "#f44336",
-                  border: "2px solid white",
-                  boxShadow: "0 0 4px rgba(0,0,0,0.3)",
-                  zIndex: 2,
-                }}
-              ></div>
+              Loading trackers...
+            </p>
+          </div>
+        ) : (
+          devices.map((device, index) => {
+            const isOnline = device?.online === true;
 
-              {/* Battery Circle */}
+            return (
               <div
+                key={device.deviceId}
                 style={{
-                  position: "absolute",
-                  bottom: "0.75rem",
-                  right: "0.75rem",
-                  width: "42px",
-                  height: "42px",
-                  zIndex: 1,
+                  flex: "1 1 calc(50% - 0.75rem)",
+                  maxWidth: isMobile ? "calc(50% - 0.75rem)" : "170px",
+                  aspectRatio: isMobile ? "auto" : "1 / 1",
+                  minHeight: isMobile ? "170px" : "190px",
+                  borderRadius: "10px",
+                  background: GRADIENTS[index % GRADIENTS.length],
+                  backgroundBlendMode: "screen",
+                  color: "rgba(33, 33, 33, 0.75)",
+                  fontFamily: "Segoe UI, sans-serif",
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                  padding: "1rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  position: "relative",
+                  opacity: isOnline ? 1 : 0.5,
+                  transition: "all 0.3s ease",
                 }}
               >
-                <svg width="42" height="42">
-                  <circle
-                    cx="21"
-                    cy="21"
-                    r="18"
-                    stroke="#fff"
-                    strokeWidth="2"
-                    fill="rgba(255,255,255,0.1)"
-                  />
-                  <circle
-                    cx="21"
-                    cy="21"
-                    r="18"
-                    fill="transparent"
-                    stroke={
-                      device.battery <= 20
-                        ? "#e74c3c"
-                        : device.battery <= 50
-                        ? "#f39c12"
-                        : "#2ecc71"
-                    }
-                    strokeWidth="3"
-                    strokeDasharray={2 * Math.PI * 18}
-                    strokeDashoffset={
-                      (1 - device.battery / 100) * 2 * Math.PI * 18
-                    }
-                    strokeLinecap="round"
-                    transform="rotate(-90 21 21)"
-                    style={{ transition: "stroke-dashoffset 0.5s ease" }}
-                  />
-                  <text
-                    x="50%"
-                    y="54%"
-                    textAnchor="middle"
-                    fill="black"
-                    fontSize="10"
-                    fontWeight="500"
-                    style={{
-                      pointerEvents: "none",
-                      textShadow: "0 1px 1px rgba(0,0,0,0.3)",
-                    }}
-                  >
-                    {device.battery}%
-                  </text>
-                </svg>
-              </div>
-
-              {/* Grayscale Wrapper */}
-              <div
-                style={{
-                  filter: isOnline ? "none" : "grayscale(100%)",
-                  flex: 1,
-                }}
-              >
+                {/* Status Dot */}
                 <div
                   style={{
-                    textAlign: "center",
-                    fontWeight: 600,
-                    fontSize: "0.95rem",
-                    marginBottom: "0.4rem",
+                    position: "absolute",
+                    top: "8px",
+                    right: "8px",
+                    width: "12px",
+                    height: "12px",
+                    borderRadius: "50%",
+                    backgroundColor: isOnline ? "#4caf50" : "#f44336",
+                    border: "2px solid white",
+                    boxShadow: "0 0 4px rgba(0,0,0,0.3)",
+                    zIndex: 2,
+                  }}
+                ></div>
+
+                {/* Battery Circle */}
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: "0.75rem",
+                    right: "0.75rem",
+                    width: "42px",
+                    height: "42px",
+                    zIndex: 1,
                   }}
                 >
-                  {device.petName}
+                  <svg width="42" height="42">
+                    <circle
+                      cx="21"
+                      cy="21"
+                      r="18"
+                      stroke="#fff"
+                      strokeWidth="2"
+                      fill="rgba(255,255,255,0.1)"
+                    />
+                    <circle
+                      cx="21"
+                      cy="21"
+                      r="18"
+                      fill="transparent"
+                      stroke={
+                        device.battery <= 20
+                          ? "#e74c3c"
+                          : device.battery <= 50
+                          ? "#f39c12"
+                          : "#2ecc71"
+                      }
+                      strokeWidth="3"
+                      strokeDasharray={2 * Math.PI * 18}
+                      strokeDashoffset={
+                        (1 - device.battery / 100) * 2 * Math.PI * 18
+                      }
+                      strokeLinecap="round"
+                      transform="rotate(-90 21 21)"
+                      style={{ transition: "stroke-dashoffset 0.5s ease" }}
+                    />
+                    <text
+                      x="50%"
+                      y="54%"
+                      textAnchor="middle"
+                      fill="black"
+                      fontSize="10"
+                      fontWeight="500"
+                      style={{
+                        pointerEvents: "none",
+                        textShadow: "0 1px 1px rgba(0,0,0,0.3)",
+                      }}
+                    >
+                      {device.battery}%
+                    </text>
+                  </svg>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "center" }}>
-                  <img
-                    src={SIM_IMAGES[device.deviceId]}
-                    alt={device.petName}
+                {/* Grayscale Wrapper */}
+                <div
+                  style={{
+                    filter: isOnline ? "none" : "grayscale(100%)",
+                    flex: 1,
+                  }}
+                >
+                  <div
                     style={{
-                      width: "70px",
-                      height: "70px",
-                      borderRadius: "8px",
-                      objectFit: "cover",
-                      border: "2px solid #fff",
-                      boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                      textAlign: "center",
+                      fontWeight: 600,
+                      fontSize: "0.95rem",
+                      marginBottom: "0.4rem",
                     }}
-                  />
-                </div>
+                  >
+                    {device.petName}
+                  </div>
 
-                <div style={{ fontSize: "0.78rem", marginTop: "0.6rem" }}>
-                  <div>
-                    <strong>ID:</strong> {device.deviceId}
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <img
+                      src={
+                        device.petImage
+                          ? `data:image/jpeg;base64,${device.petImage}`
+                          : "/avatar-default-pet-icon.jpg"
+                      }
+                      alt={device.petName}
+                      style={{
+                        width: "70px",
+                        height: "70px",
+                        borderRadius: "8px",
+                        objectFit: "cover",
+                        border: "2px solid #fff",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                      }}
+                    />
                   </div>
-                  <div>
-                    <strong>Lat:</strong> {device.lat.toFixed(4)}
-                  </div>
-                  <div>
-                    <strong>Lng:</strong> {device.lng.toFixed(4)}
+
+                  <div style={{ fontSize: "0.78rem", marginTop: "0.6rem" }}>
+                    <div>
+                      <strong>ID:</strong> {device.deviceId}
+                    </div>
+                    <div>
+                      <strong>Lat:</strong> {device.lat.toFixed(4)}
+                    </div>
+                    <div>
+                      <strong>Lng:</strong> {device.lng.toFixed(4)}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
 
         {/* ADD TRACKER CARD */}
-        <div
-          onClick={() => setShowAddModal(true)}
-          style={{
-            flex: "1 1 calc(50% - 0.75rem)",
-            maxWidth: isMobile ? "calc(50% - 0.75rem)" : "170px",
-            aspectRatio: isMobile ? "auto" : "1 / 1",
-            minHeight: isMobile ? "170px" : undefined,
-            borderRadius: "10px",
-            border: "2px dashed #ccc",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            backgroundColor: "rgba(255, 255, 255, 0.05)",
-            color: "#ccc",
-            fontWeight: "600",
-            fontSize: "0.95rem",
-            transition: "background-color 0.2s, color 0.2s",
-          }}
-          onMouseOver={(e) => {
-            e.currentTarget.style.backgroundColor = "#333";
-            e.currentTarget.style.color = "#fff";
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.05)";
-            e.currentTarget.style.color = "#ccc";
-          }}
-        >
-          + Add Tracker
-        </div>
+        {!loading && (
+          <div
+            onClick={() => setShowAddModal(true)}
+            style={{
+              flex: "1 1 calc(50% - 0.75rem)",
+              maxWidth: isMobile ? "calc(50% - 0.75rem)" : "170px",
+              aspectRatio: isMobile ? "auto" : "1 / 1",
+              minHeight: isMobile ? "170px" : "190px",
+              borderRadius: "10px",
+              border: "2px dashed #ccc",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              backgroundColor: "rgba(255, 255, 255, 0.05)",
+              color: "#ccc",
+              fontWeight: "600",
+              fontSize: "0.95rem",
+              transition: "background-color 0.2s, color 0.2s",
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = "#333";
+              e.currentTarget.style.color = "#fff";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor =
+                "rgba(255, 255, 255, 0.05)";
+              e.currentTarget.style.color = "#ccc";
+            }}
+          >
+            + Add Tracker
+          </div>
+        )}
       </div>
 
       {showAddModal && (
