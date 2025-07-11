@@ -14,9 +14,13 @@ import "@geoman-io/leaflet-geoman-free";
 import "leaflet-geometryutil";
 import * as turf from "@turf/turf";
 
+import { toast } from "react-toastify";
+
 import { useTracker } from "../utils/TrackerContext";
 
 import SelectDeviceModal from "../modals/SelectDeviceModal";
+import DeleteGeofenceModal from "../modals/DeleteGeofenceModal";
+import ViewGeofenceInfoModal from "../modals/ViewGeofenceModal";
 
 import markerRed from "../assets/markers/marker-icon-red.png";
 import markerBlue from "../assets/markers/marker-icon-blue.png";
@@ -97,6 +101,10 @@ const GeomanControls = ({
   mapRef,
   setShowDeviceModal,
   setPendingGeofence,
+  setViewGeofenceInfo,
+  setShowViewModal,
+  loadGeofences,
+  isDeleteMode,
 }) => {
   const map = useMap();
   const previewLayerRef = useRef(null);
@@ -104,60 +112,6 @@ const GeomanControls = ({
   const currentShape = useRef(null);
 
   useEffect(() => {
-    const loadGeofences = async () => {
-      try {
-        const rawUser = localStorage.getItem("user");
-        const parsed = rawUser ? JSON.parse(rawUser) : null;
-        const userId = parsed?.user_id || parsed?.userId;
-
-        if (!userId) {
-          console.warn("⚠️ No user ID found for loading geofences.");
-          return;
-        }
-
-        const res = await fetch(
-          `${import.meta.env.VITE_SOCKET_API}/api/geofences/${userId}`
-        );
-        if (!res.ok) throw new Error("Failed to fetch geofences");
-
-        const geofences = await res.json();
-        const newLayers = [];
-
-        geofences.forEach((geo) => {
-          let layer;
-
-          if (geo.type.toLowerCase() === "circle") {
-            layer = L.circle([geo.center_lat, geo.center_lng], {
-              radius: geo.radius,
-              color: "blue",
-              fillOpacity: 0.15,
-            });
-          } else if (
-            geo.type.toLowerCase() === "polygon" ||
-            geo.type.toLowerCase() === "rectangle"
-          ) {
-            const coords = JSON.parse(geo.poly_rect);
-            if (coords && Array.isArray(coords)) {
-              layer = L.polygon(coords, {
-                color: "blue",
-                fillOpacity: 0.15,
-              });
-            }
-          }
-
-          if (layer) {
-            newLayers.push(layer);
-            layer.addTo(map);
-          }
-        });
-
-        setGeofenceLayers(newLayers);
-        console.log("✅ Loaded geofences:", newLayers.length);
-      } catch (err) {
-        console.error("❌ Error loading geofences:", err.message);
-      }
-    };
-
     if (map) loadGeofences();
   }, [map, setGeofenceLayers]);
 
@@ -174,6 +128,14 @@ const GeomanControls = ({
       editMode: false,
       cutPolygon: false,
       rotateMode: false,
+    });
+
+    map.on("pm:globalremoveenabled", () => {
+      isDeleteMode.current = true;
+    });
+
+    map.on("pm:globalremovedisabled", () => {
+      isDeleteMode.current = false;
     });
 
     const updatePreview = (latlng) => {
@@ -266,6 +228,67 @@ const GeomanControls = ({
       setPendingGeofence({ shape, layer, userId });
       setShowDeviceModal(true);
       clearPreview();
+
+      layer.on("click", () => {
+        const map = mapRef.current;
+        if (!map) return;
+
+        if (map.pm?.globalRemovalModeEnabled?.()) return;
+
+        const info = {
+          type: shape,
+          name: selectedDevice?.geofenceName || "Unnamed",
+          deviceId: selectedDevice?.deviceId || "N/A",
+        };
+
+        if (shape.toLowerCase() === "circle" && layer instanceof L.Circle) {
+          const center = layer.getLatLng();
+          info.center = { lat: center.lat, lng: center.lng };
+          info.radius = layer.getRadius();
+        } else if (layer instanceof L.Polygon) {
+          const latlngs = layer.getLatLngs()[0] || [];
+          info.coordinates = latlngs.map((p) => [p.lat, p.lng]);
+        }
+
+        setViewGeofenceInfo(info);
+        setShowViewModal(true);
+      });
+    });
+
+    let deleteModalOpen = false;
+
+    map.on("pm:remove", (e) => {
+      if (deleteModalOpen) return;
+      deleteModalOpen = true;
+
+      const layer = e.layer;
+      map.addLayer(layer);
+
+      const info = {
+        geofence_id: layer.geofenceId || "N/A",
+        name: layer.geofenceName || "Unnamed",
+        deviceId: layer.deviceId || "N/A",
+        type: layer.geofenceType || "Unknown",
+      };
+
+      if (
+        layer.geofenceType?.toLowerCase() === "circle" &&
+        layer.center &&
+        layer.radius
+      ) {
+        info.center = layer.center;
+        info.radius = layer.radius;
+      } else if (layer.coordinates) {
+        info.coordinates = layer.coordinates;
+      }
+
+      if (window.triggerDeleteModal) {
+        window.triggerDeleteModal(info, layer);
+      }
+
+      setTimeout(() => {
+        deleteModalOpen = false;
+      }, 500);
     });
 
     return () => {
@@ -296,9 +319,152 @@ const MapView = ({ layoutMode = "mobile" }) => {
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   const [pendingGeofence, setPendingGeofence] = useState(null);
 
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [pendingDeleteInfo, setPendingDeleteInfo] = useState(null);
+  const [pendingDeleteLayer, setPendingDeleteLayer] = useState(null);
+
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewGeofenceInfo, setViewGeofenceInfo] = useState(null);
+
+  const isDeleteMode = useRef(false);
+
   useEffect(() => {
     console.log("✅ devices from context:", devices);
   }, [devices]);
+
+  const loadGeofences = async () => {
+    try {
+      const rawUser = localStorage.getItem("user");
+      const parsed = rawUser ? JSON.parse(rawUser) : null;
+      const userId = parsed?.user_id || parsed?.userId;
+
+      if (!userId) {
+        console.warn("⚠️ No user ID found for loading geofences.");
+        return;
+      }
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SOCKET_API}/api/geofences/${userId}`
+      );
+      if (!res.ok) throw new Error("Failed to fetch geofences");
+
+      const geofences = await res.json();
+      const newLayers = [];
+
+      geofences.forEach((geo) => {
+        const alreadyExists = geofenceLayers.some((l) => {
+          if (geo.type.toLowerCase() === "circle" && l instanceof L.Circle) {
+            const center = l.getLatLng();
+            return (
+              Math.abs(center.lat - geo.center_lat) < 0.000001 &&
+              Math.abs(center.lng - geo.center_lng) < 0.000001 &&
+              Math.abs(l.getRadius() - geo.radius) < 0.01
+            );
+          }
+
+          if (
+            (geo.type.toLowerCase() === "polygon" ||
+              geo.type.toLowerCase() === "rectangle") &&
+            l instanceof L.Polygon
+          ) {
+            const lCoords = l.getLatLngs()[0] || [];
+            const gCoords = JSON.parse(geo.poly_rect || "[]");
+
+            if (lCoords.length !== gCoords.length) return false;
+
+            function coordsMatch(c1, c2) {
+              return (
+                Math.abs(c1[0] - c2[0]) < 1e-6 && Math.abs(c1[1] - c2[1]) < 1e-6
+              );
+            }
+
+            const polygonEqual = () => {
+              const lCoordPairs = lCoords.map((p) => [p.lat, p.lng]);
+
+              if (lCoordPairs.length !== gCoords.length) return false;
+
+              return lCoordPairs.every((c, i) => coordsMatch(c, gCoords[i]));
+            };
+
+            return polygonEqual();
+          }
+
+          return false;
+        });
+
+        if (alreadyExists) return;
+
+        let layer;
+
+        if (geo.type.toLowerCase() === "circle") {
+          layer = L.circle([geo.center_lat, geo.center_lng], {
+            radius: geo.radius,
+            color: "blue",
+            fillOpacity: 0.15,
+          });
+        } else if (
+          geo.type.toLowerCase() === "polygon" ||
+          geo.type.toLowerCase() === "rectangle"
+        ) {
+          const coords = JSON.parse(geo.poly_rect);
+          if (coords && Array.isArray(coords)) {
+            layer = L.polygon(coords, {
+              color: "blue",
+              fillOpacity: 0.15,
+            });
+          }
+        }
+
+        if (layer) {
+          layer.geofenceId = geo.geofence_id;
+          layer.geofenceName = geo.geofence_name || "Unnamed";
+          layer.deviceId = geo.device_id || "N/A";
+          layer.geofenceType = geo.type;
+
+          if (geo.type.toLowerCase() === "circle") {
+            layer.center = { lat: geo.center_lat, lng: geo.center_lng };
+            layer.radius = geo.radius;
+          } else if (geo.poly_rect) {
+            try {
+              layer.coordinates = JSON.parse(geo.poly_rect);
+            } catch {}
+          }
+
+          newLayers.push(layer);
+          layer.addTo(mapRef.current);
+
+          layer.on("click", () => {
+            if (mapRef.current.pm?.globalRemovalModeEnabled?.()) return;
+            if (isDeleteMode.current) return;
+
+            const info = {
+              geofence_id: layer.geofenceId,
+              name: layer.geofenceName || "Unnamed",
+              deviceId: layer.deviceId || "N/A",
+              type: layer.geofenceType || "Unknown",
+            };
+
+            if (geo.type.toLowerCase() === "circle") {
+              info.radius = geo.radius;
+              info.center = { lat: geo.center_lat, lng: geo.center_lng };
+            } else if (geo.poly_rect) {
+              try {
+                info.coordinates = JSON.parse(geo.poly_rect);
+              } catch {}
+            }
+
+            setViewGeofenceInfo(info);
+            setShowViewModal(true);
+          });
+        }
+      });
+
+      setGeofenceLayers((prev) => [...prev, ...newLayers]);
+      console.log("✅ Reloaded geofences:", newLayers.length);
+    } catch (err) {
+      console.error("❌ Error loading geofences:", err.message);
+    }
+  };
 
   useEffect(() => {
     const restored = {};
@@ -456,61 +622,15 @@ const MapView = ({ layoutMode = "mobile" }) => {
   }, [devices]);
 
   useEffect(() => {
-    const loadGeofences = async () => {
-      try {
-        const rawUser = localStorage.getItem("user");
-        const parsed = rawUser ? JSON.parse(rawUser) : null;
-        const userId = parsed?.user_id || parsed?.userId;
-
-        if (!userId) {
-          console.warn("⚠️ No user ID found for loading geofences.");
-          return;
-        }
-
-        const res = await fetch(
-          `${import.meta.env.VITE_SOCKET_API}/api/geofences/${userId}`
-        );
-        if (!res.ok) throw new Error("Failed to fetch geofences");
-
-        const geofences = await res.json();
-        const newLayers = [];
-
-        geofences.forEach((geo) => {
-          let layer;
-
-          if (geo.type.toLowerCase() === "circle") {
-            layer = L.circle([geo.center_lat, geo.center_lng], {
-              radius: geo.radius,
-              color: "blue",
-              fillOpacity: 0.15,
-            });
-          } else if (
-            geo.type.toLowerCase() === "polygon" ||
-            geo.type.toLowerCase() === "rectangle"
-          ) {
-            const coords = JSON.parse(geo.poly_rect);
-            if (coords && Array.isArray(coords)) {
-              layer = L.polygon(coords, {
-                color: "blue",
-                fillOpacity: 0.15,
-              });
-            }
-          }
-
-          if (layer) {
-            newLayers.push(layer);
-            layer.addTo(mapRef.current);
-          }
-        });
-
-        setGeofenceLayers(newLayers);
-        console.log("✅ Loaded geofences:", newLayers.length);
-      } catch (err) {
-        console.error("❌ Error loading geofences:", err.message);
-      }
+    window.triggerDeleteModal = (info, layer) => {
+      setPendingDeleteInfo(info);
+      setPendingDeleteLayer(layer);
+      setShowDeleteModal(true);
     };
 
-    if (mapRef.current) loadGeofences();
+    return () => {
+      window.triggerDeleteModal = null;
+    };
   }, []);
 
   return (
@@ -688,6 +808,10 @@ const MapView = ({ layoutMode = "mobile" }) => {
           mapRef={mapRef}
           setShowDeviceModal={setShowDeviceModal}
           setPendingGeofence={setPendingGeofence}
+          setViewGeofenceInfo={setViewGeofenceInfo}
+          setShowViewModal={setShowViewModal}
+          loadGeofences={loadGeofences}
+          isDeleteMode={isDeleteMode}
         />
 
         <TileLayer
@@ -876,7 +1000,9 @@ const MapView = ({ layoutMode = "mobile" }) => {
             .then((res) => res.json())
             .then((data) => {
               console.log("✅ Geofence saved via modal:", data);
-              setGeofenceLayers((prev) => [...prev, layer]);
+              layer.remove(); 
+              setGeofenceLayers([]);
+              loadGeofences();
               setShowDeviceModal(false);
               setPendingGeofence(null);
             })
@@ -886,6 +1012,107 @@ const MapView = ({ layoutMode = "mobile" }) => {
               setShowDeviceModal(false);
             });
         }}
+      />
+
+      <DeleteGeofenceModal
+        show={showDeleteModal}
+        geofenceInfo={pendingDeleteInfo}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={async () => {
+          try {
+            const rawUser = localStorage.getItem("user");
+            const parsed = rawUser ? JSON.parse(rawUser) : null;
+            const userId = parsed?.user_id || parsed?.userId;
+
+            if (!userId) throw new Error("Missing user ID");
+
+            const geofenceId = pendingDeleteInfo?.geofence_id;
+            if (!geofenceId || geofenceId === "N/A") {
+              alert("Cannot delete: Missing or invalid geofence ID.");
+              return;
+            }
+
+            const response = await fetch(
+              `${
+                import.meta.env.VITE_SOCKET_API
+              }/api/geofences/delete/${geofenceId}`,
+              { method: "DELETE" }
+            );
+
+            if (!response.ok) {
+              throw new Error(
+                `Server responded with status ${response.status}`
+              );
+            }
+
+            if (geofenceLayers?.length > 0 && mapRef.current) {
+              const toRemove = geofenceLayers.filter((layer) => {
+                if (layer.geofenceId === geofenceId) return true;
+
+                if (
+                  pendingDeleteInfo?.type?.toLowerCase() === "circle" &&
+                  layer instanceof L.Circle &&
+                  Math.abs(
+                    layer.getLatLng().lat - pendingDeleteInfo?.center?.lat
+                  ) < 0.000001 &&
+                  Math.abs(
+                    layer.getLatLng().lng - pendingDeleteInfo?.center?.lng
+                  ) < 0.000001 &&
+                  Math.abs(layer.getRadius() - pendingDeleteInfo?.radius) < 0.1
+                ) {
+                  return true;
+                }
+
+                if (
+                  (pendingDeleteInfo?.type?.toLowerCase() === "polygon" ||
+                    pendingDeleteInfo?.type?.toLowerCase() === "rectangle") &&
+                  layer instanceof L.Polygon
+                ) {
+                  const lCoords = layer.getLatLngs()[0] || [];
+                  const gCoords = pendingDeleteInfo?.coordinates || [];
+
+                  if (lCoords.length !== gCoords.length) return false;
+
+                  return lCoords.every((point, index) => {
+                    const [gLat, gLng] = gCoords[index];
+                    return (
+                      Math.abs(point.lat - gLat) < 0.000001 &&
+                      Math.abs(point.lng - gLng) < 0.000001
+                    );
+                  });
+                }
+
+                return false;
+              });
+
+              toRemove.forEach((layer) => {
+                if (mapRef.current.hasLayer(layer)) {
+                  mapRef.current.removeLayer(layer);
+                }
+              });
+
+              setGeofenceLayers((prev) =>
+                prev.filter((layer) => !toRemove.includes(layer))
+              );
+            }
+
+            toast.success("Geofence deleted successfully!");
+            console.log("🗑️ Geofence deleted");
+          } catch (err) {
+            console.error("❌ Failed to delete geofence:", err.message);
+            toast.error("Failed to delete geofence. Please try again.");
+          }
+
+          setShowDeleteModal(false);
+          setPendingDeleteInfo(null);
+          setPendingDeleteLayer(null);
+        }}
+      />
+
+      <ViewGeofenceInfoModal
+        show={showViewModal}
+        geofenceInfo={viewGeofenceInfo}
+        onClose={() => setShowViewModal(false)}
       />
     </div>
   );
