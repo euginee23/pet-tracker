@@ -236,9 +236,11 @@ const GeomanControls = ({
         if (map.pm?.globalRemovalModeEnabled?.()) return;
 
         const info = {
-          type: shape,
-          name: selectedDevice?.geofenceName || "Unnamed",
-          deviceId: selectedDevice?.deviceId || "N/A",
+          geofence_id: layer.geofenceId,
+          name: layer.geofenceName || "Unnamed",
+          deviceIds: layer.deviceIds || [],
+          deviceNames: layer.deviceNames || [],
+          type: layer.geofenceType || "Unknown",
         };
 
         if (shape.toLowerCase() === "circle" && layer instanceof L.Circle) {
@@ -265,9 +267,10 @@ const GeomanControls = ({
       map.addLayer(layer);
 
       const info = {
-        geofence_id: layer.geofenceId || "N/A",
+        geofence_id: layer.geofenceId,
         name: layer.geofenceName || "Unnamed",
-        deviceId: layer.deviceId || "N/A",
+        deviceIds: layer.deviceIds || [],
+        deviceNames: layer.deviceNames || [],
         type: layer.geofenceType || "Unknown",
       };
 
@@ -318,6 +321,7 @@ const MapView = ({ layoutMode = "mobile" }) => {
 
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   const [pendingGeofence, setPendingGeofence] = useState(null);
+  const [savingGeofence, setSavingGeofence] = useState(false);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [pendingDeleteInfo, setPendingDeleteInfo] = useState(null);
@@ -351,87 +355,134 @@ const MapView = ({ layoutMode = "mobile" }) => {
       const geofences = await res.json();
       const newLayers = [];
 
+      const groupedGeofences = [];
+
       geofences.forEach((geo) => {
-        const alreadyExists = geofenceLayers.some((l) => {
-          if (geo.type.toLowerCase() === "circle" && l instanceof L.Circle) {
-            const center = l.getLatLng();
+        const isCircle = geo.type.toLowerCase() === "circle";
+        const isPolygon =
+          geo.type.toLowerCase() === "polygon" ||
+          geo.type.toLowerCase() === "rectangle";
+
+        const match = groupedGeofences.find((g) => {
+          if (isCircle) {
             return (
-              Math.abs(center.lat - geo.center_lat) < 0.000001 &&
-              Math.abs(center.lng - geo.center_lng) < 0.000001 &&
-              Math.abs(l.getRadius() - geo.radius) < 0.01
+              Math.abs(g.center_lat - geo.center_lat) < 0.000001 &&
+              Math.abs(g.center_lng - geo.center_lng) < 0.000001 &&
+              Math.abs(g.radius - geo.radius) < 0.01 &&
+              g.type === geo.type
             );
           }
 
-          if (
-            (geo.type.toLowerCase() === "polygon" ||
-              geo.type.toLowerCase() === "rectangle") &&
-            l instanceof L.Polygon
-          ) {
-            const lCoords = l.getLatLngs()[0] || [];
-            const gCoords = JSON.parse(geo.poly_rect || "[]");
+          if (isPolygon) {
+            try {
+              const a = JSON.parse(g.poly_rect || "[]");
+              const b = JSON.parse(geo.poly_rect || "[]");
+              if (a.length !== b.length) return false;
 
-            if (lCoords.length !== gCoords.length) return false;
-
-            function coordsMatch(c1, c2) {
-              return (
-                Math.abs(c1[0] - c2[0]) < 1e-6 && Math.abs(c1[1] - c2[1]) < 1e-6
+              return a.every(
+                (pt, i) =>
+                  Math.abs(pt[0] - b[i][0]) < 0.000001 &&
+                  Math.abs(pt[1] - b[i][1]) < 0.000001
               );
+            } catch {
+              return false;
             }
-
-            const polygonEqual = () => {
-              const lCoordPairs = lCoords.map((p) => [p.lat, p.lng]);
-
-              if (lCoordPairs.length !== gCoords.length) return false;
-
-              return lCoordPairs.every((c, i) => coordsMatch(c, gCoords[i]));
-            };
-
-            return polygonEqual();
           }
 
           return false;
         });
 
-        if (alreadyExists) return;
+        if (match) {
+          match.deviceIds = [
+            ...new Set([...match.deviceIds, ...geo.deviceIds]),
+          ];
+        } else {
+          groupedGeofences.push({
+            ...geo,
+            deviceIds: geo.deviceIds || [],
+          });
+        }
+      });
 
+      groupedGeofences.forEach((geo) => {
         let layer;
 
         if (geo.type.toLowerCase() === "circle") {
-          layer = L.circle([geo.center_lat, geo.center_lng], {
-            radius: geo.radius,
-            color: "blue",
-            fillOpacity: 0.15,
-          });
+          const lat = geo.center_lat;
+          const lng = geo.center_lng;
+          const radius = geo.radius;
+
+          if (
+            typeof lat === "number" &&
+            typeof lng === "number" &&
+            typeof radius === "number" &&
+            !isNaN(lat) &&
+            !isNaN(lng) &&
+            !isNaN(radius)
+          ) {
+            layer = L.circle([lat, lng], {
+              radius,
+              color: "blue",
+              fillOpacity: 0.15,
+            });
+            layer.center = { lat, lng };
+            layer.radius = radius;
+          } else {
+            console.warn(
+              `⚠️ Skipping invalid circle geofence [${geo.geofence_id}]:`,
+              { lat, lng, radius }
+            );
+            return;
+          }
         } else if (
           geo.type.toLowerCase() === "polygon" ||
           geo.type.toLowerCase() === "rectangle"
         ) {
-          const coords = JSON.parse(geo.poly_rect);
-          if (coords && Array.isArray(coords)) {
-            layer = L.polygon(coords, {
-              color: "blue",
-              fillOpacity: 0.15,
-            });
+          try {
+            const coords = JSON.parse(geo.poly_rect);
+            const valid =
+              Array.isArray(coords) &&
+              coords.length > 2 &&
+              coords.every(
+                (pt) =>
+                  Array.isArray(pt) &&
+                  typeof pt[0] === "number" &&
+                  typeof pt[1] === "number" &&
+                  !isNaN(pt[0]) &&
+                  !isNaN(pt[1])
+              );
+
+            if (valid) {
+              layer = L.polygon(coords, {
+                color: "blue",
+                fillOpacity: 0.15,
+              });
+              layer.coordinates = coords;
+            } else {
+              console.warn(
+                `⚠️ Skipping invalid polygon/rectangle geofence [${geo.geofence_id}]`,
+                coords
+              );
+              return;
+            }
+          } catch (e) {
+            console.warn(
+              `⚠️ Failed to parse polygon coordinates [${geo.geofence_id}]:`,
+              e.message
+            );
+            return;
           }
         }
 
         if (layer) {
           layer.geofenceId = geo.geofence_id;
           layer.geofenceName = geo.geofence_name || "Unnamed";
-          layer.deviceId = geo.device_id || "N/A";
+          layer.deviceIds = geo.deviceIds;
+          layer.deviceNames = geo.deviceNames;
           layer.geofenceType = geo.type;
 
-          if (geo.type.toLowerCase() === "circle") {
-            layer.center = { lat: geo.center_lat, lng: geo.center_lng };
-            layer.radius = geo.radius;
-          } else if (geo.poly_rect) {
-            try {
-              layer.coordinates = JSON.parse(geo.poly_rect);
-            } catch {}
-          }
-
-          newLayers.push(layer);
           layer.addTo(mapRef.current);
+          newLayers.push(layer);
 
           layer.on("click", () => {
             if (mapRef.current.pm?.globalRemovalModeEnabled?.()) return;
@@ -440,17 +491,16 @@ const MapView = ({ layoutMode = "mobile" }) => {
             const info = {
               geofence_id: layer.geofenceId,
               name: layer.geofenceName || "Unnamed",
-              deviceId: layer.deviceId || "N/A",
+              deviceIds: layer.deviceIds || [],
+              deviceNames: layer.deviceNames || [],
               type: layer.geofenceType || "Unknown",
             };
 
-            if (geo.type.toLowerCase() === "circle") {
-              info.radius = geo.radius;
-              info.center = { lat: geo.center_lat, lng: geo.center_lng };
-            } else if (geo.poly_rect) {
-              try {
-                info.coordinates = JSON.parse(geo.poly_rect);
-              } catch {}
+            if (layer instanceof L.Circle) {
+              info.center = layer.center;
+              info.radius = layer.radius;
+            } else if (layer instanceof L.Polygon) {
+              info.coordinates = layer.coordinates;
             }
 
             setViewGeofenceInfo(info);
@@ -522,7 +572,7 @@ const MapView = ({ layoutMode = "mobile" }) => {
             const point = turf.point([device.lng, device.lat]);
             const circle = turf.circle(
               [center.lng, center.lat],
-              radius / 1000, // convert meters to km
+              radius / 1000,
               {
                 steps: 64,
                 units: "kilometers",
@@ -539,7 +589,6 @@ const MapView = ({ layoutMode = "mobile" }) => {
             const latlngs = layer.getLatLngs()[0];
             let coords = latlngs.map((p) => [p.lng, p.lat]);
 
-            // Ensure the polygon is closed
             if (
               coords.length > 2 &&
               (coords[0][0] !== coords[coords.length - 1][0] ||
@@ -948,24 +997,31 @@ const MapView = ({ layoutMode = "mobile" }) => {
       <SelectDeviceModal
         show={showDeviceModal}
         devices={devices}
+        saving={savingGeofence}
+        setSaving={setSavingGeofence}
         onClose={() => {
           setShowDeviceModal(false);
           pendingGeofence?.layer.remove();
           setPendingGeofence(null);
         }}
-        onConfirm={(selectedDevice) => {
+        onConfirm={async (selectedDevices) => {
           const rawUser = localStorage.getItem("user");
           const parsedUser = rawUser ? JSON.parse(rawUser) : null;
           const userId = parsedUser?.user_id || parsedUser?.userId;
 
-          if (!userId) return alert("Missing user info");
+          if (!userId) {
+            toast.error("Missing user info.");
+            return;
+          }
 
           const { shape, layer } = pendingGeofence;
 
           const geofenceData = {
             user_id: userId,
-            device_id: selectedDevice.deviceId || selectedDevice.device_id,
-            geofence_name: selectedDevice.geofenceName,
+            device_ids: selectedDevices.map((d) => d.deviceId || d.device_id),
+            geofence_name:
+              selectedDevices.find((d) => d.geofenceName)?.geofenceName ||
+              "Unnamed",
             type: shape,
           };
 
@@ -988,29 +1044,45 @@ const MapView = ({ layoutMode = "mobile" }) => {
               geofenceData.poly_rect = JSON.stringify(coords);
             } else {
               console.warn("⚠️ Empty polygon");
+              toast.error("Failed to save geofence: Empty shape.");
               return;
             }
           }
 
-          fetch(`${import.meta.env.VITE_SOCKET_API}/api/geofences`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(geofenceData),
-          })
-            .then((res) => res.json())
-            .then((data) => {
-              console.log("✅ Geofence saved via modal:", data);
-              layer.remove(); 
-              setGeofenceLayers([]);
-              loadGeofences();
-              setShowDeviceModal(false);
-              setPendingGeofence(null);
-            })
-            .catch((err) => {
-              console.error("❌ Save failed:", err);
-              layer.remove();
-              setShowDeviceModal(false);
-            });
+          try {
+            const response = await fetch(
+              `${import.meta.env.VITE_SOCKET_API}/api/geofences`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(geofenceData),
+              }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              throw new Error(data?.message || "Server error");
+            }
+
+            console.log("✅ Geofence saved:", data);
+
+            if (!layer.geofenceId) {
+              layer.geofenceId = data.geofence_id;
+              layer.deviceIds = geofenceData.device_ids;
+              setGeofenceLayers((prev) => [...prev, layer]);
+            }
+
+            loadGeofences();
+            toast.success("Geofence saved successfully!");
+          } catch (err) {
+            console.error("❌ Save failed:", err);
+            layer.remove();
+            toast.error("Failed to save geofence. Please try again.");
+          } finally {
+            setShowDeviceModal(false);
+            setPendingGeofence(null);
+          }
         }}
       />
 
@@ -1026,17 +1098,30 @@ const MapView = ({ layoutMode = "mobile" }) => {
 
             if (!userId) throw new Error("Missing user ID");
 
-            const geofenceId = pendingDeleteInfo?.geofence_id;
-            if (!geofenceId || geofenceId === "N/A") {
+            const geofenceIds = Array.isArray(pendingDeleteInfo?.geofence_ids)
+              ? pendingDeleteInfo.geofence_ids
+              : pendingDeleteInfo?.geofence_id
+              ? [pendingDeleteInfo.geofence_id]
+              : [];
+
+            if (geofenceIds.length === 0) {
               alert("Cannot delete: Missing or invalid geofence ID.");
               return;
             }
 
+            const deviceIds = Array.isArray(pendingDeleteInfo.deviceIds)
+              ? pendingDeleteInfo.deviceIds
+              : pendingDeleteInfo.deviceId
+              ? [pendingDeleteInfo.deviceId]
+              : [];
+
             const response = await fetch(
-              `${
-                import.meta.env.VITE_SOCKET_API
-              }/api/geofences/delete/${geofenceId}`,
-              { method: "DELETE" }
+              `${import.meta.env.VITE_SOCKET_API}/api/geofences/delete/${
+                geofenceIds[0]
+              }?deviceIds=${deviceIds.join(",")}`,
+              {
+                method: "DELETE",
+              }
             );
 
             if (!response.ok) {
@@ -1045,9 +1130,15 @@ const MapView = ({ layoutMode = "mobile" }) => {
               );
             }
 
+            // Remove all matching layers
             if (geofenceLayers?.length > 0 && mapRef.current) {
               const toRemove = geofenceLayers.filter((layer) => {
-                if (layer.geofenceId === geofenceId) return true;
+                if (
+                  geofenceIds.includes(layer.geofenceId) ||
+                  layer.geofenceId === pendingDeleteInfo?.geofence_id
+                ) {
+                  return true;
+                }
 
                 if (
                   pendingDeleteInfo?.type?.toLowerCase() === "circle" &&
