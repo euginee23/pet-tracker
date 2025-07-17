@@ -62,6 +62,28 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
 
   const SIM_IDS = ["sim-001", "sim-002", "sim-003", "sim-004", "sim-005"];
 
+  const fetchSavedTrackers = async () => {
+    const storedUser = localStorage.getItem("user");
+    const userId =
+      JSON.parse(storedUser || "{}")?.user_id ||
+      JSON.parse(storedUser || "{}")?.userId;
+
+    if (!userId) return;
+
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SOCKET_API}/api/trackers/${userId}`
+      );
+      const data = await res.json();
+
+      setSavedTrackers(data);
+      setVisibleTrackerIds(data.map((t) => t.device_id));
+      setSavedReady(true);
+    } catch (err) {
+      console.error("❌ Failed to fetch saved trackers:", err);
+    }
+  };
+
   const selectSimDevices = async () => {
     const selected = prompt(
       "Enter simulator IDs separated by comma:\n" + SIM_IDS.join(", "),
@@ -138,6 +160,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
 
       const finalDevices = savedTrackers.map((tracker) => {
         const live = liveMap[tracker.device_id];
+        const isOnline = live?.online;
 
         return {
           deviceId: tracker.device_id,
@@ -145,10 +168,10 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
           petType: tracker.pet_type,
           petBreed: tracker.pet_breed,
           petImage: tracker.pet_image,
-          lat: live?.lat ?? 0,
-          lng: live?.lng ?? 0,
-          battery: live?.battery ?? 0,
-          online: live?.online ?? false,
+          lat: isOnline ? live.lat : tracker.last_lat,
+          lng: isOnline ? live.lng : tracker.last_lng,
+          battery: isOnline ? live.battery : tracker.last_battery,
+          online: isOnline ?? false,
           status: live?.status ?? "Offline",
         };
       });
@@ -168,6 +191,8 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
   }, [savedTrackers, visibleTrackerIds]);
 
   useEffect(() => {
+    fetchSavedTrackers();
+
     const style = document.createElement("style");
     style.innerHTML = `
     @keyframes spin {
@@ -196,21 +221,6 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
     return () => {
       document.head.removeChild(style);
     };
-  }, []);
-
-  useEffect(() => {
-    fetch(`${import.meta.env.VITE_SOCKET_API}/simulate-movement`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceIds: ["sim-002"], start: true }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("▶️ Simulator started:", data.message);
-      })
-      .catch((err) => {
-        console.error("❌ Failed to start simulator:", err);
-      });
   }, []);
 
   return (
@@ -321,6 +331,19 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
             >
               Loading trackers...
             </p>
+          </div>
+        ) : devices.length === 0 ? (
+          <div
+            style={{
+              textAlign: "center",
+              width: "100%",
+              color: "#ccc",
+              padding: "2rem 1rem",
+              fontSize: "0.95rem",
+            }}
+          >
+            You don't have any trackers yet. Click{" "}
+            <strong>+ Add Tracker</strong> to get started.
           </div>
         ) : (
           devices.map((device, index) => {
@@ -465,10 +488,16 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
                       <strong>ID:</strong> {device.deviceId}
                     </div>
                     <div>
-                      <strong>Lat:</strong> {device.lat.toFixed(4)}
+                      <strong>Lat:</strong>{" "}
+                      {typeof device.lat === "number"
+                        ? device.lat.toFixed(4)
+                        : parseFloat(device.lat)?.toFixed(4) || "N/A"}
                     </div>
                     <div>
-                      <strong>Lng:</strong> {device.lng.toFixed(4)}
+                      <strong>Lng:</strong>{" "}
+                      {typeof device.lng === "number"
+                        ? device.lng.toFixed(4)
+                        : parseFloat(device.lng)?.toFixed(4) || "N/A"}
                     </div>
                   </div>
                 </div>
@@ -522,6 +551,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
               prev.includes(deviceId) ? prev : [...prev, deviceId]
             );
             setShowAddModal(false);
+            fetchSavedTrackers();
           }}
         />
       )}

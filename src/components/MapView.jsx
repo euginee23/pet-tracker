@@ -32,6 +32,9 @@ import markerGrey from "../assets/markers/marker-icon-grey.png";
 import markerBlack from "../assets/markers/marker-icon-black.png";
 import markerGold from "../assets/markers/marker-icon-gold.png";
 
+import ShowMyLocationToggle from "./ShowMyLocationToggle";
+import useMyLocation from "../utils/useMyLocation";
+
 const markerIcons = [
   markerRed,
   markerBlue,
@@ -79,21 +82,6 @@ const tileLayers = {
     maxNativeZoom: 18,
     maxZoom: 18,
   },
-};
-
-const MapAutoCenter = ({ position, onCenter }) => {
-  const map = useMap();
-
-  useEffect(() => {
-    const id = setTimeout(() => {
-      map.setView(position, 17, { animate: true });
-      onCenter?.();
-    }, 200);
-
-    return () => clearTimeout(id);
-  }, [position]);
-
-  return null;
 };
 
 const GeomanControls = ({
@@ -309,13 +297,42 @@ const GeomanControls = ({
 
 const MapView = ({ layoutMode = "mobile" }) => {
   const { devices } = useTracker();
-  const latestDevice = devices?.length > 0 ? devices[devices.length - 1] : null;
 
-  const [position, setPosition] = useState([8.090881, 123.488679]);
+  useEffect(() => {
+    if (!devices || devices.length === 0) return;
+
+    const validDevices = devices
+      .map((d) => ({
+        lat: parseFloat(d.lat),
+        lng: parseFloat(d.lng),
+      }))
+      .filter((d) => !isNaN(d.lat) && !isNaN(d.lng));
+
+    if (validDevices.length === 1) {
+      setPosition([validDevices[0].lat, validDevices[0].lng]);
+    } else if (validDevices.length > 1) {
+      const total = validDevices.reduce(
+        (acc, d) => {
+          acc.lat += d.lat;
+          acc.lng += d.lng;
+          return acc;
+        },
+        { lat: 0, lng: 0 }
+      );
+
+      const avgLat = total.lat / validDevices.length;
+      const avgLng = total.lng / validDevices.length;
+      setPosition([avgLat, avgLng]);
+    } else {
+      console.warn("⚠️ No valid device coordinates found.");
+    }
+  }, [devices]);
+
+  // const [position, setPosition] = useState([8.090881, 123.488679]);
+  const [position, setPosition] = useState(null);
   const [pathsByDevice, setPathsByDevice] = useState({});
   const [activeTile, setActiveTile] = useState("carto");
   const [geofenceLayers, setGeofenceLayers] = useState([]);
-  const [hasCentered, setHasCentered] = useState(false);
   const [, setDistanceFromGeofence] = useState(null);
   const [showMapOptions, setShowMapOptions] = useState(false);
 
@@ -331,6 +348,31 @@ const MapView = ({ layoutMode = "mobile" }) => {
   const [viewGeofenceInfo, setViewGeofenceInfo] = useState(null);
 
   const isDeleteMode = useRef(false);
+
+  const [myLocationEnabled, setMyLocationEnabled] = useState(false);
+
+  const {
+    location: rawLocation,
+    error: locationError,
+    start,
+    stop,
+  } = useMyLocation();
+  const [myLocation, setMyLocation] = useState(null);
+
+  useEffect(() => {
+    if (locationError) {
+      toast.error(
+        "Permission denied. Sharing location failed. Please allow to show your location"
+      );
+
+      const timeout = setTimeout(() => {
+        setMyLocationEnabled(false);
+        stop();
+      }, 500);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [locationError, stop]);
 
   useEffect(() => {
     console.log("✅ devices from context:", devices);
@@ -635,14 +677,15 @@ const MapView = ({ layoutMode = "mobile" }) => {
         }
       });
     }
-
-    const last = devices[devices.length - 1];
-    if (last) {
-      setPosition([last.lat, last.lng]);
-    }
   }, [devices, geofenceLayers]);
 
   const mapRef = useRef(null);
+
+  useEffect(() => {
+    if (myLocation) {
+      setPosition([myLocation.lat, myLocation.lng]);
+    }
+  }, [myLocation]);
 
   useEffect(() => {
     if (mapRef.current && tileLayers[activeTile]) {
@@ -665,6 +708,20 @@ const MapView = ({ layoutMode = "mobile" }) => {
     });
     setPathsByDevice(cleared);
   };
+
+  useEffect(() => {
+    if (myLocationEnabled && rawLocation) {
+      setMyLocation({
+        ...rawLocation,
+        battery: 100,
+        petName: "You",
+        deviceId: "my-location",
+        online: true,
+      });
+    } else if (!myLocationEnabled) {
+      setMyLocation(null);
+    }
+  }, [myLocationEnabled, rawLocation]);
 
   useEffect(() => {
     window.devicesContextCache = devices;
@@ -717,108 +774,132 @@ const MapView = ({ layoutMode = "mobile" }) => {
           gap: "1rem",
         }}
       >
-        {/* 3-dot icon button */}
-        <div style={{ position: "relative" }}>
-          <button
-            onClick={() => setShowMapOptions((prev) => !prev)}
-            style={{
-              background: "#fff",
-              border: "1px solid #ccc",
-              borderRadius: "20%",
-              width: "36px",
-              height: "36px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-            }}
-            title="Map Layers"
-          >
-            &#8942;
-          </button>
-
-          {showMapOptions && (
-            <div
+        {/* LEFT SIDE: Map Options + Toggle */}
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          {/* Map Layers Button */}
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setShowMapOptions((prev) => !prev)}
               style={{
-                position: "absolute",
-                top: "45px",
-                left: 0,
                 background: "#fff",
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                padding: "0.75rem",
+                border: "1px solid #ccc",
+                borderRadius: "20%",
+                width: "36px",
+                height: "36px",
                 display: "flex",
-                flexDirection: "column",
-                gap: "0.5rem",
-                zIndex: 9999,
-                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                minWidth: "180px",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
               }}
+              title="Map Layers"
             >
+              &#8942;
+            </button>
+
+            {showMapOptions && (
               <div
                 style={{
-                  fontSize: "0.8rem",
-                  fontWeight: "bold",
-                  color: "#333",
-                  marginBottom: "0.5rem",
-                  paddingLeft: "0.25rem",
+                  position: "absolute",
+                  top: "45px",
+                  left: 0,
+                  background: "#fff",
+                  border: "1px solid #ddd",
+                  borderRadius: "8px",
+                  padding: "0.75rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.5rem",
+                  zIndex: 9999,
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  minWidth: "180px",
                 }}
               >
-                Select tile theme:
-              </div>
-
-              {Object.entries(tileLayers).map(([key, layer]) => (
                 <div
-                  key={key}
-                  onClick={() => {
-                    setActiveTile(key);
-                    setShowMapOptions(false);
-                  }}
                   style={{
-                    cursor: "pointer",
-                    padding: "0.5rem 0.75rem",
-                    borderRadius: "6px",
-                    backgroundColor:
-                      key === activeTile ? "#fff3cd" : "transparent",
-                    border:
-                      key === activeTile
-                        ? "1px solid #c9aa3f"
-                        : "1px solid transparent",
-                    transition: "all 0.2s",
+                    fontSize: "0.8rem",
+                    fontWeight: "bold",
+                    color: "#333",
+                    marginBottom: "0.5rem",
+                    paddingLeft: "0.25rem",
                   }}
                 >
+                  Select tile theme:
+                </div>
+
+                {Object.entries(tileLayers).map(([key, layer]) => (
                   <div
+                    key={key}
+                    onClick={() => {
+                      setActiveTile(key);
+                      setShowMapOptions(false);
+                    }}
                     style={{
-                      fontWeight: "bold",
-                      fontSize: "0.9rem",
-                      color: "#666",
+                      cursor: "pointer",
+                      padding: "0.5rem 0.75rem",
+                      borderRadius: "6px",
+                      backgroundColor:
+                        key === activeTile ? "#fff3cd" : "transparent",
+                      border:
+                        key === activeTile
+                          ? "1px solid #c9aa3f"
+                          : "1px solid transparent",
+                      transition: "all 0.2s",
                     }}
                   >
-                    {layer.name}
+                    <div
+                      style={{
+                        fontWeight: "bold",
+                        fontSize: "0.9rem",
+                        color: "#666",
+                      }}
+                    >
+                      {layer.name}
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "#666" }}>
+                      Max Zoom: {layer.maxZoom}
+                    </div>
                   </div>
-                  <div style={{ fontSize: "0.75rem", color: "#666" }}>
-                    Max Zoom: {layer.maxZoom}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-        {/* Title in center */}
-        <h4
-          style={{
-            margin: 0,
-            flex: 1,
-            textAlign: "center",
-            fontSize: "1.1rem",
-            fontWeight: "bold",
-            color: "#fff",
-          }}
-        >
-          Live Pet Location
-        </h4>
+          {/* Show My Location Toggle */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              color: "#fff",
+              fontSize: "0.85rem",
+              fontWeight: "bold",
+            }}
+          >
+            Show My Location
+            <ShowMyLocationToggle
+              value={myLocationEnabled}
+              onChange={(enabled) => {
+                setMyLocationEnabled(enabled);
+                if (enabled) {
+                  start();
+
+                  setTimeout(() => {
+                    if (locationError) {
+                      toast.error(
+                        "📍 Permission denied. Sharing location failed."
+                      );
+                      stop();
+                      setMyLocationEnabled(false);
+                    }
+                  }, 1000);
+                } else {
+                  stop();
+                }
+              }}
+            />
+          </div>
+        </div>
 
         {/* Clear Trail Button */}
         <button
@@ -839,49 +920,43 @@ const MapView = ({ layoutMode = "mobile" }) => {
         </button>
       </div>
 
-      <MapContainer
-        center={position}
-        zoom={Math.min(21, tileLayers[activeTile].maxZoom)}
-        maxZoom={tileLayers[activeTile].maxZoom}
-        scrollWheelZoom={true}
-        ref={mapRef}
-        style={{
-          height: layoutMode === "mobile" ? "50vh" : "calc(80vh - 80px)",
-          width: "100%",
-          borderRadius: "10px",
-          transformOrigin: "top left",
-        }}
-      >
-        <GeomanControls
-          setGeofenceLayers={setGeofenceLayers}
-          mapRef={mapRef}
-          setShowDeviceModal={setShowDeviceModal}
-          setPendingGeofence={setPendingGeofence}
-          setViewGeofenceInfo={setViewGeofenceInfo}
-          setShowViewModal={setShowViewModal}
-          loadGeofences={loadGeofences}
-          isDeleteMode={isDeleteMode}
-        />
-
-        <TileLayer
-          attribution={tileLayers[activeTile].attribution}
-          url={tileLayers[activeTile].url}
-          maxNativeZoom={tileLayers[activeTile].maxNativeZoom}
+      {position ? (
+        <MapContainer
+          center={position}
+          zoom={Math.min(16, tileLayers[activeTile].maxZoom)}
           maxZoom={tileLayers[activeTile].maxZoom}
-        />
-
-        {!hasCentered && (
-          <MapAutoCenter
-            position={position}
-            onCenter={() => setHasCentered(true)}
+          scrollWheelZoom={true}
+          ref={mapRef}
+          style={{
+            height: layoutMode === "mobile" ? "50vh" : "calc(80vh - 80px)",
+            width: "100%",
+            borderRadius: "10px",
+            transformOrigin: "top left",
+          }}
+        >
+          <GeomanControls
+            setGeofenceLayers={setGeofenceLayers}
+            mapRef={mapRef}
+            setShowDeviceModal={setShowDeviceModal}
+            setPendingGeofence={setPendingGeofence}
+            setViewGeofenceInfo={setViewGeofenceInfo}
+            setShowViewModal={setShowViewModal}
+            loadGeofences={loadGeofences}
+            isDeleteMode={isDeleteMode}
           />
-        )}
 
-        {devices.map((device, index) => {
-          const pos = [device.lat, device.lng];
+          <TileLayer
+            attribution={tileLayers[activeTile].attribution}
+            url={tileLayers[activeTile].url}
+            maxNativeZoom={tileLayers[activeTile].maxNativeZoom}
+            maxZoom={tileLayers[activeTile].maxZoom}
+          />
 
-          const icon = L.divIcon({
-            html: `
+          {devices.map((device, index) => {
+            const pos = [device.lat, device.lng];
+
+            const icon = L.divIcon({
+              html: `
             <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
               <div style="
                 position: absolute;
@@ -904,95 +979,189 @@ const MapView = ({ layoutMode = "mobile" }) => {
               }" style="width: 25px; height: 41px;" />
             </div>
           `,
-            className: "",
-            iconSize: [25, 50],
-            iconAnchor: [12, 41],
-          });
+              className: "",
+              iconSize: [25, 50],
+              iconAnchor: [12, 41],
+            });
 
-          return (
-            <div key={device.deviceId || index}>
-              <Marker
-                position={pos}
-                icon={icon}
-                eventHandlers={{
-                  click: () => {
-                    const selected = {
-                      ...device,
-                      device_id: device.device_id || device.deviceId,
-                    };
-                    localStorage.setItem(
-                      "selectedDevice",
-                      JSON.stringify(selected)
-                    );
-                    console.log("📌 Selected device set:", selected.device_id);
-                  },
+            return (
+              <div key={device.deviceId || index}>
+                <Marker
+                  position={pos}
+                  icon={icon}
+                  eventHandlers={{
+                    click: () => {
+                      const selected = {
+                        ...device,
+                        device_id: device.device_id || device.deviceId,
+                      };
+                      localStorage.setItem(
+                        "selectedDevice",
+                        JSON.stringify(selected)
+                      );
+                      console.log(
+                        "📌 Selected device set:",
+                        selected.device_id
+                      );
+                    },
+                  }}
+                >
+                  <Popup offset={[0, -56]}>
+                    <div style={{ fontSize: "0.85rem", lineHeight: 1.4 }}>
+                      <div
+                        style={{
+                          fontWeight: "bold",
+                          fontSize: "1rem",
+                          color: "#5c4033",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        {device.petName || "Pet"}
+                      </div>
+
+                      <div>
+                        <strong>ID:</strong> {device.deviceId}
+                      </div>
+                      <div>
+                        <strong>Battery:</strong>{" "}
+                        <span
+                          style={{
+                            color:
+                              device.battery >= 70
+                                ? "#4caf50"
+                                : device.battery >= 30
+                                ? "#ff9800"
+                                : "#f44336",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {device.battery}%
+                        </span>
+                      </div>
+                      <div>
+                        <strong>Lat:</strong>{" "}
+                        {typeof device.lat === "number"
+                          ? device.lat.toFixed(4)
+                          : parseFloat(device.lat)?.toFixed(4) || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Lng:</strong>{" "}
+                        {typeof device.lng === "number"
+                          ? device.lng.toFixed(4)
+                          : parseFloat(device.lng)?.toFixed(4) || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Status:</strong>{" "}
+                        <span
+                          style={{
+                            color: device.online ? "#4caf50" : "#f44336",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {device.online ? "Online" : "Offline"}
+                        </span>
+                      </div>
+                    </div>
+                  </Popup>
+                </Marker>
+
+                {pathsByDevice[device.deviceId]?.length > 1 && (
+                  <Polyline
+                    positions={pathsByDevice[device.deviceId]}
+                    color="red"
+                    weight={3}
+                    opacity={0.6}
+                  />
+                )}
+              </div>
+            );
+          })}
+
+          {myLocation && (
+            <Marker
+              position={[myLocation.lat, myLocation.lng]}
+              icon={L.divIcon({
+                html: `
+                    <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+                      <div style="
+                        position: absolute;
+                        top: -24px;
+                        background: rgba(33, 33, 33, 0.85);
+                        color: #fff;
+                        padding: 2px 8px;
+                        border-radius: 5px;
+                        font-size: 0.7rem;
+                        font-weight: 500;
+                        white-space: nowrap;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                        pointer-events: none;
+                        z-index: 10;
+                      ">
+                        You
+                      </div>
+                      <img src="${markerBlue}" style="width: 25px; height: 41px;" />
+                    </div>
+                  `,
+                className: "",
+                iconSize: [25, 50],
+                iconAnchor: [12, 41],
+              })}
+            />
+          )}
+
+          {pathsByDevice["my-location"]?.length > 1 && (
+            <Polyline
+              positions={pathsByDevice["my-location"]}
+              color="blue"
+              weight={3}
+              opacity={0.6}
+            />
+          )}
+        </MapContainer>
+      ) : (
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            minHeight: "200px",
+            textAlign: "center",
+            background: "rgba(0,0,0,0.3)",
+            borderRadius: "10px",
+            padding: "2rem",
+          }}
+        >
+          <div style={{ color: "#eee", fontSize: "1rem", maxWidth: "400px" }}>
+            <p
+              style={{
+                fontWeight: "bold",
+                fontSize: "1.1rem",
+                marginBottom: "0.5rem",
+              }}
+            >
+              No tracker data available.
+            </p>
+            <p>
+              To view the map, please <strong>turn on your location</strong> or{" "}
+              <strong>add a tracker</strong>.
+            </p>
+            <p style={{ marginTop: "1rem" }}>
+              <a
+                href="/trackers-info"
+                style={{
+                  color: "#ffc107",
+                  fontWeight: "bold",
+                  textDecoration: "underline",
+                  cursor: "pointer",
                 }}
               >
-                <Popup>
-                  <div style={{ fontSize: "0.85rem", lineHeight: 1.4 }}>
-                    <div
-                      style={{
-                        fontWeight: "bold",
-                        fontSize: "1rem",
-                        color: "#5c4033",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      {device.petName || "Pet"}
-                    </div>
-
-                    <div>
-                      <strong>ID:</strong> {device.deviceId}
-                    </div>
-                    <div>
-                      <strong>Battery:</strong>{" "}
-                      <span
-                        style={{
-                          color:
-                            device.battery >= 70
-                              ? "#4caf50"
-                              : device.battery >= 30
-                              ? "#ff9800"
-                              : "#f44336",
-                          fontWeight: "bold",
-                        }}
-                      >
-                        {device.battery}%
-                      </span>
-                    </div>
-                    <div>
-                      <strong>Lat:</strong> {pos[0].toFixed(5)}
-                    </div>
-                    <div>
-                      <strong>Lng:</strong> {pos[1].toFixed(5)}
-                    </div>
-                    <div>
-                      <strong>Status:</strong>{" "}
-                      <span
-                        style={{
-                          color: device.online ? "#4caf50" : "#f44336",
-                          fontWeight: "bold",
-                        }}
-                      >
-                        {device.online ? "Online" : "Offline"}
-                      </span>
-                    </div>
-                  </div>
-                </Popup>
-              </Marker>
-
-              {pathsByDevice[device.deviceId]?.length > 1 && (
-                <Polyline
-                  positions={pathsByDevice[device.deviceId]}
-                  color="red"
-                  weight={3}
-                  opacity={0.6}
-                />
-              )}
-            </div>
-          );
-        })}
-      </MapContainer>
+                Click here to learn more or purchase our trackers.
+              </a>
+            </p>
+          </div>
+        </div>
+      )}
 
       <SelectDeviceModal
         show={showDeviceModal}
