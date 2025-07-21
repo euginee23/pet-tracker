@@ -1,5 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { FaSignOutAlt } from "react-icons/fa";
+import { FaSignOutAlt, FaBell } from "react-icons/fa";
+import { useRef, useState } from "react";
+import NotificationsPopover from "./NotificationsPopover";
 
 function Navbar({ onLogout }) {
   const location = useLocation();
@@ -19,6 +21,19 @@ function Navbar({ onLogout }) {
   const hiddenRoutes = ["/", "/register", "/verify-email"];
   if (hiddenRoutes.includes(location.pathname)) return null;
 
+  // Popover state and anchor refs
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifBtnRefMobile = useRef(null);
+  const notifBtnRefDesktop = useRef(null);
+
+  // Determine which bell button is visible
+  const getActiveNotifBtnRef = () => {
+    if (window.innerWidth < 992) {
+      return notifBtnRefMobile;
+    }
+    return notifBtnRefDesktop;
+  };
+
   return (
     <nav
       className="navbar navbar-expand-lg"
@@ -28,7 +43,7 @@ function Navbar({ onLogout }) {
         borderBottom: "1px solid #e0d6c4",
       }}
     >
-      <div className="container">
+      <div className="container" style={{ position: "relative", display: "flex", alignItems: "center" }}>
         <NavLink
           to="/home"
           className="navbar-brand"
@@ -43,33 +58,59 @@ function Navbar({ onLogout }) {
           Pet Tracker
         </NavLink>
 
-        <button
-          className="navbar-toggler p-1 d-lg-none"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#navbarNav"
-          aria-controls="navbarNav"
-          aria-expanded="false"
-          aria-label="Toggle navigation"
-          style={{
-            width: "32px",
-            height: "32px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            border: "1px solid #ccc",
-            borderRadius: "4px",
-            backgroundColor: "#fff8e1",
-          }}
-        >
-          <span
-            className="navbar-toggler-icon"
-            style={{ transform: "scale(0.8)" }}
-          ></span>
-        </button>
+        {/* Mobile: bell beside toggler */}
+        <div className="d-lg-none ms-auto" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <button
+            className="navbar-toggler p-1 d-lg-none"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#navbarNav"
+            aria-controls="navbarNav"
+            aria-expanded="false"
+            aria-label="Toggle navigation"
+            style={{
+              width: "32px",
+              height: "32px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: "1px solid #ccc",
+              borderRadius: "4px",
+              backgroundColor: "#fff8e1",
+            }}
+          >
+            <span
+              className="navbar-toggler-icon"
+              style={{ transform: "scale(0.8)" }}
+            ></span>
+          </button>
+          <div style={{ position: "relative" }}>
+            <button
+              ref={notifBtnRefMobile}
+              className="btn btn-sm rounded-circle d-flex align-items-center justify-content-center"
+              style={{
+                backgroundColor: notifOpen ? "#fff3cd" : "#fffbe6",
+                color: "#b8860b",
+                border: notifOpen ? "1px solid #e0c97d" : "1px solid #ffe082",
+                fontSize: "1.1rem",
+                width: 36,
+                height: 36,
+                minWidth: 36,
+                minHeight: 36,
+                position: "relative",
+                boxShadow: notifOpen ? "0 2px 8px #ffe08255" : undefined,
+              }}
+              onClick={() => setNotifOpen((v) => !v)}
+              title="Notifications"
+            >
+              <FaBell size={18} />
+            </button>
+            <NotificationsPopover open={notifOpen} onClose={() => setNotifOpen(false)} anchorRef={notifBtnRefMobile} />
+          </div>
+        </div>
 
-        <div className="collapse navbar-collapse" id="navbarNav">
-          <ul className="navbar-nav ms-auto mb-2 mb-lg-0 d-flex gap-2">
+        <div className="collapse navbar-collapse d-lg-flex" id="navbarNav">
+          <ul className="navbar-nav ms-auto mb-2 mb-lg-0 d-flex gap-2 align-items-center">
             {[
               { path: "/home", label: "Home" },
               { path: "/dashboard", label: "Dashboard" },
@@ -98,7 +139,30 @@ function Navbar({ onLogout }) {
                 </NavLink>
               </li>
             ))}
-
+            {/* Desktop notification bell */}
+            <li className="nav-item d-none d-lg-flex align-items-center" style={{ position: "relative" }}>
+              <button
+                ref={notifBtnRefDesktop}
+                className="btn btn-sm rounded-circle d-flex align-items-center justify-content-center"
+                style={{
+                  backgroundColor: notifOpen ? "#fff3cd" : "#fffbe6",
+                  color: "#b8860b",
+                  border: notifOpen ? "1px solid #e0c97d" : "1px solid #ffe082",
+                  fontSize: "1.1rem",
+                  width: 36,
+                  height: 36,
+                  minWidth: 36,
+                  minHeight: 36,
+                  position: "relative",
+                  boxShadow: notifOpen ? "0 2px 8px #ffe08255" : undefined,
+                }}
+                onClick={() => setNotifOpen((v) => !v)}
+                title="Notifications"
+              >
+                <FaBell size={18} />
+              </button>
+              <NotificationsPopover open={notifOpen} onClose={() => setNotifOpen(false)} anchorRef={notifBtnRefDesktop} />
+            </li>
             <li className="nav-item mt-1 mt-lg-0">
               <button
                 className="btn btn-sm w-100 w-lg-auto rounded-pill px-3 fw-bold d-flex align-items-center justify-content-center gap-2"

@@ -1058,7 +1058,7 @@ const MapView = ({ layoutMode = "mobile" }) => {
                             fontWeight: "bold",
                           }}
                         >
-                          {device.online ? "Online" : "Offline"}
+                          {c ? "Online" : "Offline"}
                         </span>
                       </div>
                     </div>
