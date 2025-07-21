@@ -4,47 +4,32 @@ import { MdOutlineNotificationsNone } from "react-icons/md";
 import { IoMdTime } from "react-icons/io";
 import { BsDot } from "react-icons/bs";
 
-// Mock notifications data
-const MOCK_NOTIFICATIONS = [
-  {
-    id: 1,
-    message: "Your pet tracker battery is low.",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-    read: false,
-  },
-  {
-    id: 2,
-    message: "Tracker 002 went offline.",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-    read: true,
-  },
-  {
-    id: 3,
-    message: "New geofence alert for Bella.",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    read: false,
-  },
-];
+import { MOCK_NOTIFICATIONS } from "../utils/mockData";
 
 
-export default function NotificationsPopover({ open, onClose, anchorRef }) {
-  const [notifications, setNotifications] = useState([]);
+export default function NotificationsPopover({ 
+  open, 
+  onClose, 
+  anchorRef,
+  notifications,
+  onMarkAsRead,
+  onMarkAllAsRead,
+  onClearAll
+}) {
   const [loading, setLoading] = useState(true);
   const popoverRef = useRef(null);
+  const [expandedMessages, setExpandedMessages] = useState(new Set());
   const [position, setPosition] = useState({ top: 0, left: 0, width: 340, arrowLeft: '50%' });
 
   useEffect(() => {
     if (open) {
       setLoading(true);
       setTimeout(() => {
-        setNotifications(MOCK_NOTIFICATIONS);
         setLoading(false);
       }, 400);
     }
   }, [open]);
 
-  // Position popover below the anchor button
-  // Dynamically position popover and arrow so popover is always visible and arrow points to bell
   useEffect(() => {
     function updatePosition() {
       if (open && anchorRef && anchorRef.current && popoverRef.current) {
@@ -53,26 +38,26 @@ export default function NotificationsPopover({ open, onClose, anchorRef }) {
         const gap = 6;
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
-        // If button is not rendered, hide popover
+
         if (btnRect.width === 0 || btnRect.height === 0) {
           setPosition((prev) => ({ ...prev, top: -9999, left: -9999 }));
           return;
         }
-        // If button is at (0,0) (mobile menu, sometimes bounding rect is wrong), fallback to center
+
         let left, arrowLeft, top;
         if (btnRect.left === 0 && btnRect.top === 0) {
           left = (viewportWidth - popoverWidth) / 2;
           arrowLeft = popoverWidth / 2;
-          top = 56; // below navbar
+          top = 56; 
         } else {
-          // Calculate left so popover is centered to button, but not overflowing viewport
+
           left = btnRect.left + btnRect.width / 2 - popoverWidth / 2;
           left = Math.max(8, Math.min(left, viewportWidth - popoverWidth - 8));
-          // Arrow position: relative to popover
+
           arrowLeft = btnRect.left + btnRect.width / 2 - left;
-          // Clamp arrow so it doesn't go outside popover
+
           arrowLeft = Math.max(18, Math.min(arrowLeft, popoverWidth - 18));
-          // For mobile, if popover would go off bottom, move up
+
           top = btnRect.bottom + gap;
           const popoverHeight = popoverRef.current.offsetHeight || 320;
           if (top + popoverHeight > viewportHeight - 8) {
@@ -98,7 +83,7 @@ export default function NotificationsPopover({ open, onClose, anchorRef }) {
     }
   }, [open, anchorRef]);
 
-  // Close popover on outside click
+
   useEffect(() => {
     if (!open) return;
     function handleClick(e) {
@@ -114,24 +99,18 @@ export default function NotificationsPopover({ open, onClose, anchorRef }) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open, onClose, anchorRef]);
 
-  // Mark all as read
   const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    onMarkAllAsRead();
   };
 
-  // Clear all notifications
   const clearAll = () => {
-    setNotifications([]);
+    onClearAll();
   };
 
-  // Mark a single notification as read
   const markAsRead = (id) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id || n._id === id ? { ...n, read: true } : n))
-    );
+    onMarkAsRead(id);
   };
 
-  // If popover is offscreen (e.g. menu closed), don't render
   if (!open || position.top < 0 || position.left < 0) return null;
 
   return (
@@ -164,7 +143,8 @@ export default function NotificationsPopover({ open, onClose, anchorRef }) {
           height: 0,
           borderLeft: "10px solid transparent",
           borderRight: "10px solid transparent",
-          borderBottom: "12px solid #e3e7ef",
+          borderBottom: "12px solid #fff",
+          filter: "drop-shadow(0 -1.5px 0 #e3e7ef)",
           pointerEvents: "none",
         }}
       />
@@ -227,9 +207,9 @@ export default function NotificationsPopover({ open, onClose, anchorRef }) {
       <ul style={{ listStyle: "none", padding: 0, margin: 0, maxHeight: 300, overflowY: "auto" }}>
         {notifications.map((n) => {
           let icon = <FaBell size={13} color="#3a4a6b" />;
-          if (/battery|low/i.test(n.message)) icon = <FaExclamationTriangle size={13} color="#e67e22" />;
-          if (/offline/i.test(n.message)) icon = <FaExclamationTriangle size={13} color="#d32f2f" />;
-          if (/geofence|alert/i.test(n.message)) icon = <FaCheckCircle size={13} color="#2196f3" />;
+          if (/battery|low/i.test(n.message)) icon = <FaExclamationTriangle size={15} color="#e67e22" />;
+          if (/offline/i.test(n.message)) icon = <FaExclamationTriangle size={15} color="#d32f2f" />;
+          if (/geofence|alert/i.test(n.message)) icon = <FaCheckCircle size={15} color="#2196f3" />;
 
           return (
             <li
@@ -239,7 +219,7 @@ export default function NotificationsPopover({ open, onClose, anchorRef }) {
                 border: n.read ? "1px solid #e3e7ef" : "1.2px solid #b8c6e3",
                 borderRadius: 7,
                 marginBottom: 10,
-                padding: "0.7rem 0.9rem 0.7rem 0.9rem",
+                padding: "0.9rem 1.1rem 2.2rem 1.1rem",
                 boxShadow: n.read ? "none" : "0 1px 4px 0 rgba(33, 150, 243, 0.08)",
                 fontWeight: n.read ? 400 : 500,
                 color: n.read ? "#4a5568" : "#1a237e",
@@ -249,36 +229,111 @@ export default function NotificationsPopover({ open, onClose, anchorRef }) {
                 position: "relative",
                 fontSize: "0.91rem",
                 minHeight: 60,
-                transition: 'background 0.18s, border 0.18s',
-                paddingBottom: "1.7rem"
+                transition: 'background 0.18s, border 0.18s'
               }}
             >
-              {/* Dot indicator (top-right) */}
+              
+              {/* DOT INDICATOR */}
               {!n.read && (
-                <span style={{ position: "absolute", top: 7, right: 10 }}>
-                  <BsDot size={17} color="#2196f3" title="Unread" />
+                <span style={{ position: "absolute", top: 6, right: 8 }}>
+                  <BsDot size={22} color="#2196f3" title="Unread" />
                 </span>
               )}
-              <span style={{ marginTop: 2 }}>{icon}</span>
-              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
-                <div style={{ lineHeight: 1.35, wordBreak: "break-word", paddingBottom: 22 }}>{n.message}</div>
-                <div
-                  style={{
-                    fontSize: "0.77rem",
-                    color: "#7b8794",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 3,
-                    position: "absolute",
-                    left: 18,
-                    bottom: 8,
-                  }}
-                >
-                  <IoMdTime style={{ marginRight: 1, opacity: 0.7 }} />
-                  {new Date(n.createdAt).toLocaleString()}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                alignSelf: 'stretch',
+                position: 'relative',
+                paddingRight: 16,
+                marginLeft: -2,
+                width: 32
+              }}>
+                <span>{icon}</span>
+                <span style={{
+                  width: '1px',
+                  backgroundColor: n.read ? '#e3e7ef' : '#b8c6e3',
+                  position: 'absolute',
+                  right: 0,
+                  top: -14,
+                  bottom: -35,
+                  opacity: 0.8
+                }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ 
+                  lineHeight: 1.35, 
+                  wordBreak: "break-word", 
+                  paddingLeft: 8,
+                  marginBottom: 14,
+                  marginTop: -2 
+                }}>
+                  {n.message.length > 100 && !expandedMessages.has(n.id) ? (
+                    <>
+                      {n.message.substring(0, 100)}...
+                      <button
+                        onClick={() => setExpandedMessages(prev => new Set([...prev, n.id]))}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: '0 4px',
+                          color: '#2196f3',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          fontWeight: 500,
+                        }}
+                      >
+                        Show more
+                      </button>
+                    </>
+                  ) : n.message.length > 100 ? (
+                    <>
+                      {n.message}
+                      <button
+                        onClick={() => setExpandedMessages(prev => {
+                          const newSet = new Set(prev);
+                          newSet.delete(n.id);
+                          return newSet;
+                        })}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: '0 4px',
+                          color: '#2196f3',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          fontWeight: 500,
+                          display: 'block',
+                          marginTop: 4
+                        }}
+                      >
+                        Show less
+                      </button>
+                    </>
+                  ) : (
+                    n.message
+                  )}
                 </div>
               </div>
-              {/* Read button (bottom-right) */}
+
+              {/* DATE TIME */}
+              <div
+                style={{
+                  fontSize: "0.77rem",
+                  color: "#7b8794",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 3,
+                  position: "absolute",
+                  left: 54,
+                  bottom: 12,
+                  paddingLeft: 8,
+                }}
+              >
+                <IoMdTime style={{ marginRight: 1, opacity: 0.7 }} />
+                {new Date(n.createdAt).toLocaleString()}
+              </div>
+
+              {/* READ BUTTON */}
               {!n.read && (
                 <button
                   onClick={() => markAsRead(n.id || n._id)}
@@ -295,7 +350,7 @@ export default function NotificationsPopover({ open, onClose, anchorRef }) {
                     transition: 'background 0.15s',
                     position: "absolute",
                     right: 14,
-                    bottom: 7,
+                    bottom: 12,
                   }}
                   title="Mark as read"
                 >

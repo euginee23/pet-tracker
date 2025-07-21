@@ -1,7 +1,8 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { FaSignOutAlt, FaBell } from "react-icons/fa";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import NotificationsPopover from "./NotificationsPopover";
+import { MOCK_NOTIFICATIONS } from "../utils/mockData";
 
 function Navbar({ onLogout }) {
   const location = useLocation();
@@ -17,16 +18,30 @@ function Navbar({ onLogout }) {
     }
   };
 
-  // Hide navbar for these public routes
   const hiddenRoutes = ["/", "/register", "/verify-email"];
   if (hiddenRoutes.includes(location.pathname)) return null;
 
-  // Popover state and anchor refs
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
   const notifBtnRefMobile = useRef(null);
   const notifBtnRefDesktop = useRef(null);
 
-  // Determine which bell button is visible
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const handleMarkAsRead = (id) => {
+    setNotifications(prev =>
+      prev.map(n => (n.id === id ? { ...n, read: true } : n))
+    );
+  };
+
+  const handleMarkAllAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const handleClearAll = () => {
+    setNotifications([]);
+  };
+
   const getActiveNotifBtnRef = () => {
     if (window.innerWidth < 992) {
       return notifBtnRefMobile;
@@ -59,7 +74,78 @@ function Navbar({ onLogout }) {
         </NavLink>
 
         {/* Mobile: bell beside toggler */}
-        <div className="d-lg-none ms-auto" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <div className="d-lg-none ms-auto" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ position: "relative" }}>
+            <button
+              ref={notifBtnRefMobile}
+              className="btn btn-sm rounded-circle d-flex align-items-center justify-content-center"
+              style={{
+                backgroundColor: notifOpen ? "#fff3cd" : "#fffbe6",
+                color: "#b8860b",
+                border: notifOpen ? "1px solid #e0c97d" : "1px solid #ffe082",
+                fontSize: "1.1rem",
+                width: 36,
+                height: 36,
+                minWidth: 36,
+                minHeight: 36,
+                position: "relative",
+                boxShadow: notifOpen ? "0 2px 8px #ffe08255" : undefined,
+              }}
+              onClick={() => setNotifOpen((v) => !v)}
+              title="Notifications"
+            >
+              <FaBell size={18} />
+              {unreadCount > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  top: -6,
+                  left: -6,
+                  background: '#f44336',
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: 18,
+                  height: 18,
+                  fontSize: '0.7rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1.5px solid #fff',
+                  fontWeight: 'bold',
+                }}>
+                  {unreadCount}
+                </div>
+              )}
+              {unreadCount > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  top: -6,
+                  left: -6,
+                  background: '#f44336',
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: 18,
+                  height: 18,
+                  fontSize: '0.7rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '1.5px solid #fff',
+                  fontWeight: 'bold',
+                }}>
+                  {unreadCount}
+                </div>
+              )}
+            </button>
+            <NotificationsPopover 
+              open={notifOpen} 
+              onClose={() => setNotifOpen(false)}
+              anchorRef={notifBtnRefMobile}
+              notifications={notifications}
+              onMarkAsRead={handleMarkAsRead}
+              onMarkAllAsRead={handleMarkAllAsRead}
+              onClearAll={handleClearAll}
+            />
+          </div>
           <button
             className="navbar-toggler p-1 d-lg-none"
             type="button"
@@ -84,29 +170,6 @@ function Navbar({ onLogout }) {
               style={{ transform: "scale(0.8)" }}
             ></span>
           </button>
-          <div style={{ position: "relative" }}>
-            <button
-              ref={notifBtnRefMobile}
-              className="btn btn-sm rounded-circle d-flex align-items-center justify-content-center"
-              style={{
-                backgroundColor: notifOpen ? "#fff3cd" : "#fffbe6",
-                color: "#b8860b",
-                border: notifOpen ? "1px solid #e0c97d" : "1px solid #ffe082",
-                fontSize: "1.1rem",
-                width: 36,
-                height: 36,
-                minWidth: 36,
-                minHeight: 36,
-                position: "relative",
-                boxShadow: notifOpen ? "0 2px 8px #ffe08255" : undefined,
-              }}
-              onClick={() => setNotifOpen((v) => !v)}
-              title="Notifications"
-            >
-              <FaBell size={18} />
-            </button>
-            <NotificationsPopover open={notifOpen} onClose={() => setNotifOpen(false)} anchorRef={notifBtnRefMobile} />
-          </div>
         </div>
 
         <div className="collapse navbar-collapse d-lg-flex" id="navbarNav">
@@ -160,8 +223,36 @@ function Navbar({ onLogout }) {
                 title="Notifications"
               >
                 <FaBell size={18} />
+                {unreadCount > 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: -6,
+                    left: -6,
+                    background: '#f44336',
+                    color: 'white',
+                    borderRadius: '50%',
+                    width: 18,
+                    height: 18,
+                    fontSize: '0.7rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1.5px solid #fff',
+                    fontWeight: 'bold',
+                  }}>
+                    {unreadCount}
+                  </div>
+                )}
               </button>
-              <NotificationsPopover open={notifOpen} onClose={() => setNotifOpen(false)} anchorRef={notifBtnRefDesktop} />
+              <NotificationsPopover 
+                open={notifOpen} 
+                onClose={() => setNotifOpen(false)}
+                anchorRef={notifBtnRefDesktop}
+                notifications={notifications}
+                onMarkAsRead={handleMarkAsRead}
+                onMarkAllAsRead={handleMarkAllAsRead}
+                onClearAll={handleClearAll}
+              />
             </li>
             <li className="nav-item mt-1 mt-lg-0">
               <button
