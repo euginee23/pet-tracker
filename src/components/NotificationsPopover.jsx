@@ -4,9 +4,6 @@ import { MdOutlineNotificationsNone } from "react-icons/md";
 import { IoMdTime } from "react-icons/io";
 import { BsDot } from "react-icons/bs";
 
-import { MOCK_NOTIFICATIONS } from "../utils/mockData";
-
-
 export default function NotificationsPopover({ 
   open, 
   onClose, 

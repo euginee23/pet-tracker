@@ -12,7 +12,6 @@ import { jwtDecode } from "jwt-decode";
 
 import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
-import Trackers from "./pages/Trackers";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import EmailVerification from "./pages/EmailVerification";
@@ -152,14 +151,6 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/trackers"
-            element={
-              <ProtectedRoute>
-                <Trackers />
               </ProtectedRoute>
             }
           />

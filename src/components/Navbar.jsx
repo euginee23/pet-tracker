@@ -2,7 +2,14 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { FaSignOutAlt, FaBell } from "react-icons/fa";
 import { useRef, useState, useEffect } from "react";
 import NotificationsPopover from "./NotificationsPopover";
-import { MOCK_NOTIFICATIONS } from "../utils/mockData";
+import { 
+  initializeSocket, 
+  subscribeToNotifications, 
+  fetchNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  clearAllNotifications
+} from "../utils/notificationData";
 
 function Navbar({ onLogout }) {
   const location = useLocation();
@@ -22,24 +29,97 @@ function Navbar({ onLogout }) {
   if (hiddenRoutes.includes(location.pathname)) return null;
 
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const notifBtnRefMobile = useRef(null);
   const notifBtnRefDesktop = useRef(null);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const handleMarkAsRead = (id) => {
-    setNotifications(prev =>
-      prev.map(n => (n.id === id ? { ...n, read: true } : n))
-    );
+  useEffect(() => {
+    // Initialize socket and fetch initial notifications
+    const socket = initializeSocket();
+    
+    const loadNotifications = async () => {
+      setIsLoading(true);
+      // Get user ID from local storage if available
+      const userData = localStorage.getItem('user');
+      let userId = null;
+      
+      if (userData) {
+        try {
+          const parsedUser = JSON.parse(userData);
+          userId = parsedUser.id || parsedUser.user_id;
+        } catch (error) {
+          console.error("Error parsing user data:", error);
+        }
+      }
+      
+      const fetchedNotifications = await fetchNotifications(userId);
+      setNotifications(fetchedNotifications);
+      setIsLoading(false);
+    };
+
+    loadNotifications();
+
+    // Subscribe to new notifications
+    const unsubscribe = subscribeToNotifications((newNotification) => {
+      setNotifications(prev => [newNotification, ...prev]);
+    });
+
+    return () => {
+      unsubscribe();
+      socket.disconnect();
+    };
+  }, []);
+
+  const handleMarkAsRead = async (id) => {
+    const success = await markNotificationAsRead(id);
+    if (success) {
+      setNotifications(prev =>
+        prev.map(n => (n.id === id ? { ...n, read: true } : n))
+      );
+    }
   };
 
-  const handleMarkAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  const handleMarkAllAsRead = async () => {
+    // Get user ID from local storage if available
+    const userData = localStorage.getItem('user');
+    let userId = null;
+    
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        userId = parsedUser.id || parsedUser.user_id;
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+      }
+    }
+    
+    const success = await markAllNotificationsAsRead(userId);
+    if (success) {
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    }
   };
 
-  const handleClearAll = () => {
-    setNotifications([]);
+  const handleClearAll = async () => {
+    // Get user ID from local storage if available
+    const userData = localStorage.getItem('user');
+    let userId = null;
+    
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        userId = parsedUser.id || parsedUser.user_id;
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+      }
+    }
+    
+    const success = await clearAllNotifications(userId);
+    if (success) {
+      setNotifications([]);
+    }
   };
 
   const getActiveNotifBtnRef = () => {
@@ -177,7 +257,6 @@ function Navbar({ onLogout }) {
             {[
               { path: "/home", label: "Home" },
               { path: "/dashboard", label: "Dashboard" },
-              { path: "/trackers", label: "Trackers" },
               { path: "/settings", label: "Settings" },
             ].map(({ path, label }) => (
               <li className="nav-item" key={path}>

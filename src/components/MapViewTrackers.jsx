@@ -131,9 +131,23 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Keep track of last known positions for each device
+  const lastKnownPositionsRef = useRef({});
+
   useEffect(() => {
-    socket.current = io(import.meta.env.VITE_SOCKET_API);
-    console.log("✅ Socket connected");
+    socket.current = io(import.meta.env.VITE_SOCKET_API, {
+      secure: true,
+      rejectUnauthorized: false, // Only during development with self-signed certificates
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
+    });
+    console.log("✅ Socket connected via WSS");
+
+    socket.current.on("connect_error", (error) => {
+      console.error("Socket connection error:", error.message);
+    });
 
     socket.current.on("devices", (deviceList) => {
       const now = Date.now();
@@ -143,6 +157,19 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
         const isOnline = now - d.lastSeen <= CHECK_INTERVAL;
         if (isOnline && !firstSeenRef.current[d.deviceId]) {
           firstSeenRef.current[d.deviceId] = d.lastSeen;
+        }
+
+        // Store the last known position for each device that has valid coordinates
+        if (d.lat && d.lng) {
+          if (!lastKnownPositionsRef.current[d.deviceId]) {
+            lastKnownPositionsRef.current[d.deviceId] = {};
+          }
+          lastKnownPositionsRef.current[d.deviceId] = {
+            lat: d.lat,
+            lng: d.lng,
+            battery: d.battery,
+            lastSeen: d.lastSeen
+          };
         }
 
         liveMap[d.deviceId] = {
@@ -161,6 +188,14 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
       const finalDevices = savedTrackers.map((tracker) => {
         const live = liveMap[tracker.device_id];
         const isOnline = live?.online;
+        const lastKnown = lastKnownPositionsRef.current[tracker.device_id];
+
+        // Use last known position from memory if available, otherwise fall back to database values
+        const position = {
+          lat: (isOnline ? live?.lat : lastKnown?.lat) ?? tracker.last_lat,
+          lng: (isOnline ? live?.lng : lastKnown?.lng) ?? tracker.last_lng,
+          battery: (isOnline ? live?.battery : lastKnown?.battery) ?? tracker.last_battery
+        };
 
         return {
           deviceId: tracker.device_id,
@@ -168,9 +203,9 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
           petType: tracker.pet_type,
           petBreed: tracker.pet_breed,
           petImage: tracker.pet_image,
-          lat: isOnline ? live.lat : tracker.last_lat,
-          lng: isOnline ? live.lng : tracker.last_lng,
-          battery: isOnline ? live.battery : tracker.last_battery,
+          lat: position.lat,
+          lng: position.lng,
+          battery: position.battery,
           online: isOnline ?? false,
           status: live?.status ?? "Offline",
         };
