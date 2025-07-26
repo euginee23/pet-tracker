@@ -131,17 +131,18 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Keep track of last known positions for each device
   const lastKnownPositionsRef = useRef({});
 
   useEffect(() => {
     socket.current = io(import.meta.env.VITE_SOCKET_API, {
       secure: true,
-      rejectUnauthorized: false, // Only during development with self-signed certificates
-      transports: ['websocket'],
+      rejectUnauthorized: false, 
+      transports: ['polling', 'websocket'], 
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000
     });
     console.log("✅ Socket connected via WSS");
 
