@@ -22,9 +22,9 @@ export const subscribeToNotifications = (callback) => {
   if (!socket) initializeSocket();
   
   // Load audio files
-  const alertSound = new Audio('/src/assets/notificationSounds/alert_sound.wav');
-  const normalSound = new Audio('/src/assets/notificationSounds/normal_sound.wav');
-  const offlineSound = new Audio('/src/assets/notificationSounds/offline_sound.wav');
+  const alertSound = new Audio('./public/assets/notificationSounds/alert_sound.wav');
+  const normalSound = new Audio('./public/assets/notificationSounds/normal_sound.wav');
+  const offlineSound = new Audio('./public/assets/notificationSounds/offline_sound.wav');
   
   socket.on('notification', (notification) => {
     const formattedNotification = {

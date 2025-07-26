@@ -41,8 +41,10 @@ function App() {
     const publicPaths = ["/", "/register", "/verify-email"];
     if (!isAuth && !publicPaths.includes(location.pathname)) {
       navigate("/");
+    } else if (isAuth && location.pathname === "/") {
+      navigate("/home");
     }
-  }, [location]);
+  }, [location, navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
