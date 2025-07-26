@@ -30,6 +30,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
 
   const [savedReady, setSavedReady] = useState(false);
   const [socketReady, setSocketReady] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
   const loading = !savedReady || !socketReady;
   const [savedTrackers, setSavedTrackers] = useState([]);
 
@@ -136,18 +137,30 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
   useEffect(() => {
     socket.current = io(import.meta.env.VITE_SOCKET_API, {
       secure: true,
-      rejectUnauthorized: false, 
-      transports: ['polling', 'websocket'], 
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000
     });
-    console.log("✅ Socket connected via WSS");
+    console.log("✅ Socket connecting to:", import.meta.env.VITE_SOCKET_API);
+
+    socket.current.on('connect', () => {
+      console.log('✅ Socket connected successfully');
+      setSocketReady(true);
+      setConnectionStatus('connected');
+    });
+
+    socket.current.on('disconnect', (reason) => {
+      console.log('🔌 Socket disconnected:', reason);
+      setSocketReady(false);
+      setConnectionStatus('disconnected');
+    });
 
     socket.current.on("connect_error", (error) => {
-      console.error("Socket connection error:", error.message);
+      console.error("❌ Socket connection error:", error.message);
+      setConnectionStatus('error');
     });
 
     socket.current.on("devices", (deviceList) => {
@@ -299,7 +312,9 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
           borderBottom: "1px solid #e0dcd6",
         }}
       >
-        <span>Your Trackers</span>
+        <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          Your Trackers
+        </span>
 
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button
@@ -365,7 +380,10 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
             <p
               style={{ marginTop: "0.5rem", color: "#ccc", fontSize: "0.9rem" }}
             >
-              Loading trackers...
+              {!savedReady && !socketReady ? "Loading trackers..." : 
+               !savedReady ? "Loading saved data..." : 
+               !socketReady ? `Connecting to server... (${connectionStatus})` : 
+               "Loading..."}
             </p>
           </div>
         ) : devices.length === 0 ? (
