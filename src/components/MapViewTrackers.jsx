@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { io } from "socket.io-client";
 import { useTracker } from "../utils/TrackerContext";
 import AddTrackerModal from "../modals/AddTrackerModal";
+import { 
+  subscribeToDevices, 
+  fetchSavedTrackers, 
+  simulateMovement, 
+  getConnectionStatus 
+} from "../utils/deviceData";
 
 function formatDuration(ms) {
   const seconds = Math.floor(ms / 1000);
@@ -17,7 +22,6 @@ function formatDuration(ms) {
 const CHECK_INTERVAL = 10000;
 
 const MapViewTrackers = ({ layoutMode = "mobile" }) => {
-  const socket = useRef(null);
   const { devices, setDevices } = useTracker();
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 480);
 
@@ -63,7 +67,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
 
   const SIM_IDS = ["sim-001", "sim-002", "sim-003", "sim-004", "sim-005"];
 
-  const fetchSavedTrackers = async () => {
+  const loadSavedTrackers = async () => {
     const storedUser = localStorage.getItem("user");
     const userId =
       JSON.parse(storedUser || "{}")?.user_id ||
@@ -72,11 +76,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
     if (!userId) return;
 
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SOCKET_API}/api/trackers/${userId}`
-      );
-      const data = await res.json();
-
+      const data = await fetchSavedTrackers(userId);
       setSavedTrackers(data);
       setVisibleTrackerIds(data.map((t) => t.device_id));
       setSavedReady(true);
@@ -108,16 +108,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
     }
 
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SOCKET_API}/simulate-movement`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceIds, start }),
-        }
-      );
-      const data = await res.json();
-      console.log(start ? "▶️ Started:" : "🛑 Stopped:", data.message);
+      await simulateMovement(deviceIds, start);
       setSimulating(start);
     } catch (err) {
       console.error("❌ Simulation toggle failed:", err);
@@ -135,35 +126,8 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
   const lastKnownPositionsRef = useRef({});
 
   useEffect(() => {
-    socket.current = io(import.meta.env.VITE_SOCKET_API, {
-      secure: true,
-      transports: ['polling', 'websocket'],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000
-    });
-    console.log("✅ Socket connecting to:", import.meta.env.VITE_SOCKET_API);
-
-    socket.current.on('connect', () => {
-      console.log('✅ Socket connected successfully');
-      setSocketReady(true);
-      setConnectionStatus('connected');
-    });
-
-    socket.current.on('disconnect', (reason) => {
-      console.log('🔌 Socket disconnected:', reason);
-      setSocketReady(false);
-      setConnectionStatus('disconnected');
-    });
-
-    socket.current.on("connect_error", (error) => {
-      console.error("❌ Socket connection error:", error.message);
-      setConnectionStatus('error');
-    });
-
-    socket.current.on("devices", (deviceList) => {
+    // Subscribe to device updates
+    const unsubscribe = subscribeToDevices((deviceList) => {
       const now = Date.now();
 
       const liveMap = {};
@@ -231,16 +195,22 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
 
       setDevices(filtered);
       setSocketReady(true);
+      setConnectionStatus(getConnectionStatus());
     });
 
+    // Update connection status periodically
+    const statusInterval = setInterval(() => {
+      setConnectionStatus(getConnectionStatus());
+    }, 2000);
+
     return () => {
-      socket.current?.disconnect();
-      console.log("🛑 Socket disconnected");
+      unsubscribe();
+      clearInterval(statusInterval);
     };
   }, [savedTrackers, visibleTrackerIds]);
 
   useEffect(() => {
-    fetchSavedTrackers();
+    loadSavedTrackers();
 
     const style = document.createElement("style");
     style.innerHTML = `
@@ -251,24 +221,10 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
   `;
     document.head.appendChild(style);
 
-    const storedUser = localStorage.getItem("user");
-    const userId =
-      JSON.parse(storedUser || "{}")?.user_id ||
-      JSON.parse(storedUser || "{}")?.userId;
-
-    if (!userId) return;
-
-    fetch(`${import.meta.env.VITE_SOCKET_API}/api/trackers/${userId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setSavedTrackers(data);
-        setVisibleTrackerIds(data.map((t) => t.device_id));
-        setSavedReady(true);
-      })
-      .catch((err) => console.error("❌ Failed to fetch saved trackers:", err));
-
     return () => {
-      document.head.removeChild(style);
+      if (document.head.contains(style)) {
+        document.head.removeChild(style);
+      }
     };
   }, []);
 
@@ -605,7 +561,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
               prev.includes(deviceId) ? prev : [...prev, deviceId]
             );
             setShowAddModal(false);
-            fetchSavedTrackers();
+            loadSavedTrackers();
           }}
         />
       )}
