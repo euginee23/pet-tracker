@@ -296,7 +296,7 @@ const GeomanControls = ({
 };
 
 const MapView = ({ layoutMode = "mobile" }) => {
-  const { devices } = useTracker();
+  const { devices, focusTracker } = useTracker();
 
   useEffect(() => {
     if (!devices || devices.length === 0) return;
@@ -680,6 +680,20 @@ const MapView = ({ layoutMode = "mobile" }) => {
   }, [devices, geofenceLayers]);
 
   const mapRef = useRef(null);
+
+  // Handle focusing on tracker location
+  useEffect(() => {
+    if (focusTracker && focusTracker.coordinates && mapRef.current) {
+      const map = mapRef.current;
+      const { lat, lng } = focusTracker.coordinates;
+      
+      // Animate to the tracker location with zoom level 18
+      map.setView([lat, lng], 18, {
+        animate: true,
+        duration: 1.5
+      });
+    }
+  }, [focusTracker]);
 
   useEffect(() => {
     if (myLocation) {

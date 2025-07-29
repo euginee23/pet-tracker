@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTracker } from "../utils/TrackerContext";
 import AddTrackerModal from "../modals/AddTrackerModal";
+import ViewTrackerPopover from "./ViewTrackerPopover";
 import { 
   subscribeToDevices, 
   fetchSavedTrackers, 
@@ -27,6 +28,9 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [visibleTrackerIds, setVisibleTrackerIds] = useState([]);
+  const [selectedTracker, setSelectedTracker] = useState(null);
+  const [popoverPosition, setPopoverPosition] = useState({ x: 0, y: 0 });
+  const [showPopover, setShowPopover] = useState(false);
 
   const firstSeenRef = useRef({});
 
@@ -115,6 +119,24 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
     }
   };
 
+  const handleCardClick = (event, device) => {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.bottom + 10;
+    
+    setPopoverPosition({ x, y });
+    setSelectedTracker(device);
+    setShowPopover(true);
+  };
+
+  const closePopover = () => {
+    setShowPopover(false);
+    setSelectedTracker(null);
+  };
+
   useEffect(() => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 480);
@@ -126,7 +148,6 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
   const lastKnownPositionsRef = useRef({});
 
   useEffect(() => {
-    // Subscribe to device updates
     const unsubscribe = subscribeToDevices((deviceList) => {
       const now = Date.now();
 
@@ -137,7 +158,6 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
           firstSeenRef.current[d.deviceId] = d.lastSeen;
         }
 
-        // Store the last known position for each device that has valid coordinates
         if (d.lat && d.lng) {
           if (!lastKnownPositionsRef.current[d.deviceId]) {
             lastKnownPositionsRef.current[d.deviceId] = {};
@@ -155,11 +175,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
           lng: d.lng,
           battery: d.battery,
           online: isOnline,
-          status: isOnline
-            ? `Online: ${formatDuration(
-                now - firstSeenRef.current[d.deviceId]
-              )}`
-            : `Offline: ${formatDuration(now - d.lastSeen)} ago`,
+          status: isOnline ? "Online" : "Offline",
         };
       });
 
@@ -168,7 +184,6 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
         const isOnline = live?.online;
         const lastKnown = lastKnownPositionsRef.current[tracker.device_id];
 
-        // Use last known position from memory if available, otherwise fall back to database values
         const position = {
           lat: (isOnline ? live?.lat : lastKnown?.lat) ?? tracker.last_lat,
           lng: (isOnline ? live?.lng : lastKnown?.lng) ?? tracker.last_lng,
@@ -362,6 +377,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
             return (
               <div
                 key={device.deviceId}
+                onClick={(e) => handleCardClick(e, device)}
                 style={{
                   flex: "1 1 calc(50% - 0.75rem)",
                   maxWidth: isMobile ? "calc(50% - 0.75rem)" : "170px",
@@ -380,6 +396,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
                   position: "relative",
                   opacity: isOnline ? 1 : 0.5,
                   transition: "all 0.3s ease",
+                  cursor: "pointer",
                 }}
               >
                 {/* Status Dot */}
@@ -551,6 +568,16 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
           </div>
         )}
       </div>
+
+      {/* Tracker Popover */}
+      <ViewTrackerPopover
+        key={selectedTracker?.deviceId}
+        tracker={selectedTracker ? devices.find(d => d.deviceId === selectedTracker.deviceId) || selectedTracker : null}
+        position={popoverPosition}
+        isVisible={showPopover}
+        onClose={closePopover}
+        isMobile={isMobile}
+      />
 
       {showAddModal && (
         <AddTrackerModal

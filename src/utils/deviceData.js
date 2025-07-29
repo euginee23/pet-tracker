@@ -123,7 +123,6 @@ export const simulateMovement = async (deviceIds, start = true, battery = null) 
   }
 };
 
-// Get current socket connection status
 export const getConnectionStatus = () => {
   if (!socket) return 'disconnected';
   if (socket.connected) return 'connected';
@@ -131,7 +130,6 @@ export const getConnectionStatus = () => {
   return 'disconnected';
 };
 
-// Check if the device tracking service is accessible
 export const checkDeviceServiceHealth = async () => {
   try {
     const response = await fetch(`${BACKEND_URL}/api/health/devices`);
@@ -149,7 +147,6 @@ export const checkDeviceServiceHealth = async () => {
   }
 };
 
-// Disconnect the socket (useful for cleanup)
 export const disconnectSocket = () => {
   if (socket) {
     socket.disconnect();
