@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTracker } from "../utils/TrackerContext";
+import TrackerSettingsModal from "../modals/TrackerSettingsModal";
 
 const ViewTrackerPopover = ({ 
   tracker, 
@@ -9,6 +10,12 @@ const ViewTrackerPopover = ({
   isMobile = false 
 }) => {
   const { focusOnTracker } = useTracker();
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [currentTracker, setCurrentTracker] = useState(tracker);
+
+  useEffect(() => {
+    setCurrentTracker(tracker);
+  }, [tracker]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -27,16 +34,29 @@ const ViewTrackerPopover = ({
   }, [isVisible, onClose]);
 
   const handleViewOnMap = () => {
-    if (tracker && tracker.lat && tracker.lng) {
-      focusOnTracker(tracker.deviceId, {
-        lat: parseFloat(tracker.lat),
-        lng: parseFloat(tracker.lng)
+    if (currentTracker && currentTracker.lat && currentTracker.lng) {
+      focusOnTracker(currentTracker.deviceId, {
+        lat: parseFloat(currentTracker.lat),
+        lng: parseFloat(currentTracker.lng)
       });
       onClose(); 
     }
   };
 
-  if (!isVisible || !tracker) return null;
+  const handleOpenSettings = () => {
+    setShowSettingsModal(true);
+  };
+
+  const handleCloseSettings = () => {
+    setShowSettingsModal(false);
+  };
+
+  const handleSaveSettings = (updatedTracker) => {
+    setCurrentTracker(updatedTracker);
+    setShowSettingsModal(false);
+  };
+
+  if (!isVisible || !currentTracker) return null;
 
   const getPopoverStyles = () => {
     if (isMobile) {
@@ -141,11 +161,11 @@ const ViewTrackerPopover = ({
         }}>
           <img
             src={
-              tracker.petImage
-                ? `data:image/jpeg;base64,${tracker.petImage}`
+              currentTracker.petImage
+                ? `data:image/jpeg;base64,${currentTracker.petImage}`
                 : "/avatar-default-pet-icon.jpg"
             }
-            alt={tracker.petName}
+            alt={currentTracker.petName}
             style={{
               width: isMobile ? "50px" : "45px",
               height: isMobile ? "50px" : "45px",
@@ -163,7 +183,7 @@ const ViewTrackerPopover = ({
               wordBreak: "break-word",
               lineHeight: "1.2"
             }}>
-              {tracker.petName}
+              {currentTracker.petName}
             </h3>
             <p style={{ 
               margin: "0", 
@@ -172,7 +192,7 @@ const ViewTrackerPopover = ({
               wordBreak: "break-word",
               lineHeight: "1.2"
             }}>
-              {tracker.petType} • {tracker.petBreed}
+              {currentTracker.petType} • {currentTracker.petBreed}
             </p>
           </div>
         </div>
@@ -192,7 +212,7 @@ const ViewTrackerPopover = ({
               width: isMobile ? "10px" : "8px",
               height: isMobile ? "10px" : "8px",
               borderRadius: "50%",
-              backgroundColor: tracker.online ? "#4caf50" : "#f44336",
+              backgroundColor: currentTracker.online ? "#4caf50" : "#f44336",
               boxShadow: "0 0 4px rgba(0, 0, 0, 0.2)",
             }}
           ></div>
@@ -201,7 +221,7 @@ const ViewTrackerPopover = ({
             fontWeight: "500",
             flex: 1
           }}>
-            {tracker.status}
+            {currentTracker.status}
           </span>
         </div>
 
@@ -233,7 +253,7 @@ const ViewTrackerPopover = ({
               borderRadius: "3px",
               wordBreak: "break-all"
             }}>
-              {tracker.deviceId}
+              {currentTracker.deviceId}
             </span>
           </div>
           
@@ -254,10 +274,10 @@ const ViewTrackerPopover = ({
             <span style={{ 
               fontWeight: "600",
               fontSize: isMobile ? "0.9rem" : "0.85rem",
-              color: tracker.battery <= 20 ? "#e74c3c" : 
-                     tracker.battery <= 50 ? "#f39c12" : "#2ecc71"
+              color: currentTracker.battery <= 20 ? "#e74c3c" : 
+                     currentTracker.battery <= 50 ? "#f39c12" : "#2ecc71"
             }}>
-              {tracker.battery}%
+              {currentTracker.battery}%
             </span>
           </div>
 
@@ -282,9 +302,9 @@ const ViewTrackerPopover = ({
               padding: "2px 4px",
               borderRadius: "3px"
             }}>
-              {typeof tracker.lat === "number"
-                ? tracker.lat.toFixed(6)
-                : parseFloat(tracker.lat)?.toFixed(6) || "N/A"}
+              {typeof currentTracker.lat === "number"
+                ? currentTracker.lat.toFixed(6)
+                : parseFloat(currentTracker.lat)?.toFixed(6) || "N/A"}
             </span>
           </div>
 
@@ -308,9 +328,9 @@ const ViewTrackerPopover = ({
               padding: "2px 4px",
               borderRadius: "3px"
             }}>
-              {typeof tracker.lng === "number"
-                ? tracker.lng.toFixed(6)
-                : parseFloat(tracker.lng)?.toFixed(6) || "N/A"}
+              {typeof currentTracker.lng === "number"
+                ? currentTracker.lng.toFixed(6)
+                : parseFloat(currentTracker.lng)?.toFixed(6) || "N/A"}
             </span>
           </div>
         </div>
@@ -345,6 +365,7 @@ const ViewTrackerPopover = ({
             View on Map
           </button>
           <button
+            onClick={handleOpenSettings}
             style={{
               flex: 1,
               padding: isMobile ? "8px 12px" : "6px 10px",
@@ -368,6 +389,15 @@ const ViewTrackerPopover = ({
           </button>
         </div>
       </div>
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <TrackerSettingsModal
+          tracker={currentTracker}
+          onClose={handleCloseSettings}
+          onSave={handleSaveSettings}
+        />
+      )}
     </>
   );
 };

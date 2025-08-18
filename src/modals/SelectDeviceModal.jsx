@@ -49,7 +49,7 @@ const SelectDeviceModal = ({
   return (
     <Modal show={show} onHide={onClose} centered backdrop="static">
       <Modal.Header closeButton className="py-2 px-3">
-        <Modal.Title className="fs-6 fw-semibold">Select a Device</Modal.Title>
+        <Modal.Title className="fs-6 fw-semibold">Geofence</Modal.Title>
       </Modal.Header>
 
       <Modal.Body className="py-2 px-3">
