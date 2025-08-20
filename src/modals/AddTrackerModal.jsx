@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import { FaCamera, FaImage } from "react-icons/fa";
-import Camera from "../assets/Camera";
+import { useCamera } from "../utils/useCamera";
+import { toast } from "react-toastify";
 
 const AddTrackerModal = ({ onClose, onConfirm }) => {
   const storedUser = localStorage.getItem("user");
@@ -21,15 +22,13 @@ const AddTrackerModal = ({ onClose, onConfirm }) => {
   const [petImage, setPetImage] = useState(null);
   const [preview, setPreview] = useState(null);
   const socketRef = useRef(null);
-
-  const [showCamera, setShowCamera] = useState(false);
-  const isNativeCameraSupported = () => {
-    const input = document.createElement("input");
-    input.setAttribute("type", "file");
-    input.setAttribute("accept", "image/*");
-    input.setAttribute("capture", "environment");
-    return typeof input.capture !== "undefined";
-  };
+  
+  const { 
+    showCamera,
+    setShowCamera,
+    isNativeCameraSupported,
+    CameraComponent 
+  } = useCamera();
 
   const [matchedDevice, setMatchedDevice] = useState(null);
 
@@ -151,14 +150,33 @@ const AddTrackerModal = ({ onClose, onConfirm }) => {
 
         const result = await res.json();
         if (!res.ok) {
-          setValidationMessage(result.message || "Failed to save tracker.");
+          const errorMsg = result.message || "Failed to save tracker.";
+          setValidationMessage(errorMsg);
+          toast.error(errorMsg, {
+            position: "top-right",
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true
+          });
           setSaving(false);
           return;
         }
 
-        setValidationMessage("✅ Tracker saved successfully!");
+        // Show success message with Toastify
+        toast.success("Tracker added successfully!", {
+          position: "top-right",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true
+        });
+        
+        // Pass the deviceId to onConfirm so it can be shown on the map immediately
         setTimeout(() => {
-          onConfirm();
+          onConfirm(trimmedDeviceId);
           setDeviceId("");
           setStatus("");
           setPetName("");
@@ -169,7 +187,7 @@ const AddTrackerModal = ({ onClose, onConfirm }) => {
           setCustomBreed("");
           setValidationMessage("");
           setSaving(false);
-        }, 1500);
+        }, 1000);
       };
 
       if (petImage instanceof File) {
@@ -184,7 +202,16 @@ const AddTrackerModal = ({ onClose, onConfirm }) => {
       }
     } catch (err) {
       console.error("Error saving tracker:", err);
-      setValidationMessage("Something went wrong while saving the tracker.");
+      const errorMsg = "Something went wrong while saving the tracker.";
+      setValidationMessage(errorMsg);
+      toast.error(errorMsg, {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true
+      });
       setSaving(false);
     }
   };
@@ -209,11 +236,11 @@ const AddTrackerModal = ({ onClose, onConfirm }) => {
           <input
             value={deviceId}
             onChange={(e) => setDeviceId(e.target.value)}
-            placeholder="e.g. sim-001"
+            placeholder="e.g. PetTracker_Build0x0"
             style={input}
           />
           <small style={hint}>
-            Make sure your tracker is powered on and sending data.
+            Make sure your tracker is powered on and is online.
           </small>
 
           {status === "loading" && <p style={loading}>🔍 Searching...</p>}
@@ -448,15 +475,12 @@ const AddTrackerModal = ({ onClose, onConfirm }) => {
           )}
         </div>
       </div>
-      {showCamera && (
-        <Camera
-          onCapture={(dataUrl) => {
-            setPreview(dataUrl);
-            setPetImage(dataUrl);
-          }}
-          onClose={() => setShowCamera(false)}
-        />
-      )}
+      <CameraComponent
+        onCapture={(dataUrl) => {
+          setPreview(dataUrl);
+          setPetImage(dataUrl);
+        }}
+      />
     </div>
   );
 };

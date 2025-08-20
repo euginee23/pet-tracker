@@ -6,7 +6,8 @@ import {
   subscribeToDevices, 
   fetchSavedTrackers, 
   simulateMovement, 
-  getConnectionStatus 
+  getConnectionStatus,
+  initializeSocket
 } from "../utils/deviceData";
 
 function formatDuration(ms) {
@@ -39,7 +40,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
   const [savedReady, setSavedReady] = useState(false);
   const [socketReady, setSocketReady] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
-  const loading = !savedReady || !socketReady;
+  const loading = !savedReady; // Only wait for saved trackers to be loaded
   const [savedTrackers, setSavedTrackers] = useState([]);
 
   const GRADIENTS = [
@@ -77,15 +78,28 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
       JSON.parse(storedUser || "{}")?.user_id ||
       JSON.parse(storedUser || "{}")?.userId;
 
-    if (!userId) return;
+    if (!userId) {
+      console.warn("⚠️ No user ID found, cannot load trackers");
+      setSavedReady(true); // Mark as ready even though we have no data
+      return;
+    }
 
     try {
+      console.log("🔄 Loading saved trackers for user:", userId);
       const data = await fetchSavedTrackers(userId);
-      setSavedTrackers(data);
-      setVisibleTrackerIds(data.map((t) => t.device_id));
+      
+      if (data && data.length > 0) {
+        console.log(`✅ Loaded ${data.length} saved trackers`);
+        setSavedTrackers(data);
+        setVisibleTrackerIds(data.map((t) => t.device_id));
+      } else {
+        console.log("ℹ️ No saved trackers found for user");
+      }
+      
       setSavedReady(true);
     } catch (err) {
       console.error("❌ Failed to fetch saved trackers:", err);
+      setSavedReady(true); // Mark as ready even on error to allow fallback UI
     }
   };
 
@@ -147,7 +161,27 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
 
   const lastKnownPositionsRef = useRef({});
 
+  // Setup socket connection immediately when component mounts
   useEffect(() => {
+    // Initialize socket connection
+    initializeSocket();
+    
+    const statusInterval = setInterval(() => {
+      setConnectionStatus(getConnectionStatus());
+    }, 2000);
+    
+    return () => {
+      clearInterval(statusInterval);
+    };
+  }, []);
+  
+  // Handle socket data updates
+  useEffect(() => {
+    // Only subscribe to socket updates if we have savedTrackers
+    if (!savedReady) return;
+    
+    console.log('🔌 Setting up socket subscription with', savedTrackers.length, 'saved trackers');
+    
     const unsubscribe = subscribeToDevices((deviceList) => {
       const now = Date.now();
 
@@ -208,20 +242,43 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
         visibleTrackerIds.includes(d.deviceId)
       );
 
+      console.log('📡 Updating devices from socket with', filtered.length, 'filtered devices');
       setDevices(filtered);
       setSocketReady(true);
       setConnectionStatus(getConnectionStatus());
     });
 
-    // Update connection status periodically
-    const statusInterval = setInterval(() => {
-      setConnectionStatus(getConnectionStatus());
-    }, 2000);
-
     return () => {
+      console.log('🔌 Unsubscribing from socket updates');
       unsubscribe();
-      clearInterval(statusInterval);
     };
+  }, [savedTrackers, visibleTrackerIds, savedReady]);
+
+  // Initialize devices when saved trackers are loaded
+  useEffect(() => {
+    if (savedTrackers.length > 0) {
+      // Create initial devices from saved trackers even before socket data arrives
+      const initialDevices = savedTrackers.map((tracker) => {
+        return {
+          deviceId: tracker.device_id,
+          petName: tracker.pet_name,
+          petType: tracker.pet_type,
+          petBreed: tracker.pet_breed,
+          petImage: tracker.pet_image,
+          lat: tracker.last_lat,
+          lng: tracker.last_lng,
+          battery: tracker.last_battery,
+          online: false, // Mark as offline initially until socket data arrives
+          status: "Offline",
+        };
+      });
+      
+      // Only update if we have some valid devices and they're different from current devices
+      if (initialDevices.length > 0) {
+        console.log('📱 Initializing devices from saved trackers:', initialDevices.length);
+        setDevices(initialDevices.filter(d => visibleTrackerIds.includes(d.deviceId)));
+      }
+    }
   }, [savedTrackers, visibleTrackerIds]);
 
   useEffect(() => {
@@ -587,6 +644,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
             setVisibleTrackerIds((prev) =>
               prev.includes(deviceId) ? prev : [...prev, deviceId]
             );
+            
             setShowAddModal(false);
             loadSavedTrackers();
           }}

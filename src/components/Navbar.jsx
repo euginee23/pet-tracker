@@ -2,6 +2,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { FaSignOutAlt, FaBell } from "react-icons/fa";
 import { useRef, useState, useEffect } from "react";
 import NotificationsPopover from "./NotificationsPopover";
+import LogoutModal from "../modals/LogoutModal";
 import { 
   initializeSocket, 
   subscribeToNotifications, 
@@ -14,6 +15,7 @@ import {
 function Navbar({ onLogout }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const closeMenu = () => {
     const navbar = document.querySelector(".navbar-collapse");
@@ -344,15 +346,26 @@ function Navbar({ onLogout }) {
                 }}
                 onClick={() => {
                   closeMenu();
-                  onLogout();
+                  setShowLogoutModal(true);
                 }}
               >
                 <FaSignOutAlt size={20} />
+                <span className="d-none d-sm-inline">Logout</span>
               </button>
             </li>
           </ul>
         </div>
       </div>
+      
+      {/* Logout Confirmation Modal */}
+      <LogoutModal 
+        show={showLogoutModal} 
+        onClose={() => setShowLogoutModal(false)} 
+        onConfirm={() => {
+          setShowLogoutModal(false);
+          onLogout();
+        }}
+      />
     </nav>
   );
 }

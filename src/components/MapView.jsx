@@ -301,12 +301,19 @@ const MapView = ({ layoutMode = "mobile" }) => {
   useEffect(() => {
     if (!devices || devices.length === 0) return;
 
+    // Filter devices with valid coordinates
     const validDevices = devices
-      .map((d) => ({
-        lat: parseFloat(d.lat),
-        lng: parseFloat(d.lng),
-      }))
-      .filter((d) => !isNaN(d.lat) && !isNaN(d.lng));
+      .map((d) => {
+        // Check if lat/lng are strings like "waiting" or valid numbers
+        const lat = typeof d.lat === "string" && isNaN(parseFloat(d.lat)) ? null : parseFloat(d.lat);
+        const lng = typeof d.lng === "string" && isNaN(parseFloat(d.lng)) ? null : parseFloat(d.lng);
+        
+        return {
+          lat,
+          lng,
+        };
+      })
+      .filter((d) => d.lat !== null && d.lng !== null && !isNaN(d.lat) && !isNaN(d.lng));
 
     if (validDevices.length === 1) {
       setPosition([validDevices[0].lat, validDevices[0].lng]);
@@ -578,7 +585,21 @@ const MapView = ({ layoutMode = "mobile" }) => {
       const updatedPaths = { ...prev };
 
       devices.forEach((device) => {
-        const newPos = [device.lat, device.lng];
+        // Validate coordinates
+        const lat = typeof device.lat === "string" && isNaN(parseFloat(device.lat)) 
+          ? null 
+          : parseFloat(device.lat);
+        const lng = typeof device.lng === "string" && isNaN(parseFloat(device.lng)) 
+          ? null 
+          : parseFloat(device.lng);
+        
+        // Skip invalid coordinates
+        if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+          console.log(`⚠️ Skipping path update for device ${device.deviceId} with invalid coordinates`);
+          return;
+        }
+        
+        const newPos = [lat, lng];
         const current = updatedPaths[device.deviceId] || [];
 
         const last = current[current.length - 1];
@@ -598,7 +619,21 @@ const MapView = ({ layoutMode = "mobile" }) => {
 
     if (geofenceLayers.length > 0) {
       devices.forEach((device) => {
-        const newPos = [device.lat, device.lng];
+        // Validate coordinates
+        const lat = typeof device.lat === "string" && isNaN(parseFloat(device.lat)) 
+          ? null 
+          : parseFloat(device.lat);
+        const lng = typeof device.lng === "string" && isNaN(parseFloat(device.lng)) 
+          ? null 
+          : parseFloat(device.lng);
+        
+        // Skip invalid coordinates
+        if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+          console.log(`⚠️ Skipping geofence check for device ${device.deviceId} with invalid coordinates`);
+          return;
+        }
+        
+        const newPos = [lat, lng];
         const latlng = L.latLng(newPos);
         let isInsideAny = false;
         let closestDistance = Infinity;
@@ -611,7 +646,7 @@ const MapView = ({ layoutMode = "mobile" }) => {
             const center = layer.getLatLng();
             const radius = layer.getRadius();
 
-            const point = turf.point([device.lng, device.lat]);
+            const point = turf.point([lng, lat]);
             const circle = turf.circle(
               [center.lng, center.lat],
               radius / 1000,
@@ -640,7 +675,7 @@ const MapView = ({ layoutMode = "mobile" }) => {
             }
 
             const polygon = turf.polygon([coords]);
-            const point = turf.point([device.lng, device.lat]);
+            const point = turf.point([lng, lat]);
 
             isInside = turf.booleanPointInPolygon(point, polygon);
 
@@ -967,7 +1002,21 @@ const MapView = ({ layoutMode = "mobile" }) => {
           />
 
           {devices.map((device, index) => {
-            const pos = [device.lat, device.lng];
+            // Skip devices with invalid coordinates (like "waiting")
+            const lat = typeof device.lat === "string" && isNaN(parseFloat(device.lat)) 
+              ? null 
+              : parseFloat(device.lat);
+            const lng = typeof device.lng === "string" && isNaN(parseFloat(device.lng)) 
+              ? null 
+              : parseFloat(device.lng);
+            
+            // Skip this device if coordinates are invalid
+            if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+              console.log(`⚠️ Skipping marker for device ${device.deviceId} with invalid coordinates`);
+              return null;
+            }
+            
+            const pos = [lat, lng];
 
             const icon = L.divIcon({
               html: `

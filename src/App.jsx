@@ -166,6 +166,29 @@ function App() {
           />
         </Routes>
       </div>
+      
+      {/* Global Footer */}
+      <div style={{
+        backgroundColor: '#212529',
+        color: 'white',
+        padding: '0.5rem 0',
+        width: '100%',
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+      }}>
+        <div className="container-fluid">
+          <div className="d-flex align-items-center justify-content-center">
+            <img src="/circle_logo_svg.svg" alt="Pet Tracker Logo" width="20" className="me-2" />
+            <span style={{ fontSize: '0.9rem' }}>Pet Tracker | CodeHub.Site © 2025</span>
+          </div>
+        </div>
+      </div>
+      
+      {/* Add padding to prevent content from being hidden under the footer */}
+      <div style={{ paddingBottom: '3rem' }}></div>
     </>
   );
 }

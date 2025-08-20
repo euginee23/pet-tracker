@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ProfileInfo from "../components/ProfileInfo";
 import PasswordSecurityPanel from "../components/PasswordSecurityPanel";
+import NotificationSettingsPanel from "../components/NotificationSettingsPanel";
 import { FaChevronDown, FaChevronRight } from "react-icons/fa";
 
 function Settings() {
@@ -58,6 +59,16 @@ function Settings() {
               >
                 Password & Security
               </button>
+              <button
+                className={`btn btn-sm ${
+                  activeTab === "notifications"
+                    ? "btn-dark fw-bold"
+                    : "btn-outline-dark"
+                }`}
+                onClick={() => handleTabClick("notifications")}
+              >
+                Notifications
+              </button>
             </div>
           </div>
 
@@ -74,7 +85,7 @@ function Settings() {
                     ? "btn-dark fw-bold"
                     : "btn-outline-dark"
                 }`}
-                onClick={() => setActiveTab("edit")}
+                onClick={() => handleTabClick("edit")}
               >
                 Profile
               </button>
@@ -84,9 +95,19 @@ function Settings() {
                     ? "btn-dark fw-bold"
                     : "btn-outline-dark"
                 }`}
-                onClick={() => setActiveTab("security")}
+                onClick={() => handleTabClick("security")}
               >
                 Password & Security
+              </button>
+              <button
+                className={`btn btn-sm ${
+                  activeTab === "notifications"
+                    ? "btn-dark fw-bold"
+                    : "btn-outline-dark"
+                }`}
+                onClick={() => handleTabClick("notifications")}
+              >
+                Notifications
               </button>
             </div>
           </div>
@@ -102,7 +123,13 @@ function Settings() {
               overflowX: "auto",
             }}
           >
-            {activeTab === "edit" ? <ProfileInfo /> : <PasswordSecurityPanel />}
+            {activeTab === "edit" ? (
+              <ProfileInfo />
+            ) : activeTab === "security" ? (
+              <PasswordSecurityPanel />
+            ) : activeTab === "notifications" ? (
+              <NotificationSettingsPanel />
+            ) : null}
           </div>
         </div>
       </div>

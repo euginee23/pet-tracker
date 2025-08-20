@@ -6,6 +6,7 @@ import {
   FaCheckCircle,
   FaTimesCircle,
 } from "react-icons/fa";
+import VerifyPhoneModal from "../modals/VerifyPhoneModal";
 
 function ProfileInfo() {
   const [user, setUser] = useState(null);
@@ -18,6 +19,7 @@ function ProfileInfo() {
     email: "",
     phone: "",
   });
+  const [showVerifyPhoneModal, setShowVerifyPhoneModal] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -86,6 +88,10 @@ function ProfileInfo() {
     setEditMode(false);
     setUser({ ...user, ...form });
     localStorage.setItem("user", JSON.stringify({ ...user, ...form }));
+  };
+
+  const handlePhoneVerification = () => {
+    setUser({ ...user, phone_verification: true });
   };
 
   if (!user) {
@@ -294,7 +300,10 @@ function ProfileInfo() {
       <div className="row gx-3 gy-3">
         {/* Email Verification */}
         <div className="col-12 col-md-6">
-          <div className="border rounded shadow-sm position-relative p-3 h-100" style={{backgroundColor: "#f9f9f9"}}>
+          <div
+            className="border rounded shadow-sm position-relative p-3 h-100"
+            style={{ backgroundColor: "#f9f9f9" }}
+          >
             <button
               className={`btn btn-sm rounded-pill px-3 py-1 position-absolute ${
                 user.email_verification
@@ -330,7 +339,10 @@ function ProfileInfo() {
 
         {/* Phone Verification */}
         <div className="col-12 col-md-6">
-          <div className="border rounded shadow-sm position-relative p-3 h-100" style={{backgroundColor: "#f9f9f9"}}>
+          <div
+            className="border rounded shadow-sm position-relative p-3 h-100"
+            style={{ backgroundColor: "#f9f9f9" }}
+          >
             <button
               className={`btn btn-sm rounded-pill px-3 py-1 position-absolute ${
                 user.phone_verification
@@ -338,6 +350,7 @@ function ProfileInfo() {
                   : "btn-outline-primary"
               }`}
               style={{ top: "10px", right: "10px", fontSize: "0.75rem" }}
+              onClick={() => setShowVerifyPhoneModal(true)}
             >
               {user.phone_verification ? "Verified" : "Verify"}
             </button>
@@ -359,12 +372,20 @@ function ProfileInfo() {
                 <br />
                 {user.phone_verification
                   ? "Your phone is verified."
-                  : "Please verify your phone for full access."}
+                  : "Please verify your phone for SMS notifications."}
               </p>
             </div>
           </div>
         </div>
       </div>
+
+      {showVerifyPhoneModal && (
+        <VerifyPhoneModal
+          phone={user.phone}
+          onClose={() => setShowVerifyPhoneModal(false)}
+          onVerify={handlePhoneVerification}
+        />
+      )}
     </>
   );
 }
