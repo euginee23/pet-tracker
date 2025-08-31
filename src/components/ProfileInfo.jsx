@@ -8,6 +8,7 @@ import {
   FaCamera,
   FaImage,
 } from "react-icons/fa";
+import { toast } from "react-toastify";
 import VerifyPhoneModal from "../modals/VerifyPhoneModal";
 import { useCamera } from "../utils/useCamera";
 
@@ -24,12 +25,9 @@ function ProfileInfo() {
     phone: "",
   });
   const [showVerifyPhoneModal, setShowVerifyPhoneModal] = useState(false);
+  const [sendingSms, setSendingSms] = useState(false);
 
-  const {
-    handleImageChange,
-    openCamera,
-    CameraComponent
-  } = useCamera();
+  const { handleImageChange, openCamera, CameraComponent } = useCamera();
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -58,7 +56,7 @@ function ProfileInfo() {
             email: result.user.email,
             phone: formatPhoneForInput(result.user.phone || ""),
           });
-          
+
           if (result.user.profile_photo) {
             setPreview(`data:image/jpeg;base64,${result.user.profile_photo}`);
           }
@@ -86,30 +84,56 @@ function ProfileInfo() {
 
   const formatPhilippinePhone = (number) => {
     if (!number || number === "0" || number.trim() === "") return number;
-    
+
     const digits = number.replace(/\D/g, "");
-    const cleaned = digits.startsWith("0") ? digits.slice(1) : digits;
 
-    if (cleaned.length !== 10) return number;
+    // Handle 63XXXXXXXXXX format (convert to 09XXXXXXXXXX for display)
+    if (digits.startsWith("63") && digits.length >= 12) {
+      const localNumber = "0" + digits.substring(2);
+      const part1 = localNumber.slice(0, 4);
+      const part2 = localNumber.slice(4, 7);
+      const part3 = localNumber.slice(7);
+      return `${part1} ${part2} ${part3}`;
+    }
 
-    const part1 = cleaned.slice(0, 3);
-    const part2 = cleaned.slice(3, 6);
-    const part3 = cleaned.slice(6);
+    // Handle normal local format
+    const cleaned = digits.startsWith("0") ? digits : "0" + digits;
 
-    return `+63 ${part1} ${part2} ${part3}`;
+    if (cleaned.length !== 11) return number; // Not a valid PH number
+
+    const part1 = cleaned.slice(0, 4); // 09XX
+    const part2 = cleaned.slice(4, 7); // XXX
+    const part3 = cleaned.slice(7); // XXXX
+
+    return `${part1} ${part2} ${part3}`;
   };
 
   const formatPhoneForInput = (number) => {
     if (!number || number === "0" || number.trim() === "") return "";
-    
+
     const digits = number.replace(/\D/g, "");
-    
-    if (digits.length <= 4) {
-      return digits;
-    } else if (digits.length <= 7) {
-      return `${digits.slice(0, 4)} ${digits.slice(4)}`;
+
+    // Convert 63XXXXXXXXXX to 09XXXXXXXXXX for user input
+    let normalizedDigits = digits;
+    if (digits.startsWith("63") && digits.length >= 12) {
+      normalizedDigits = "0" + digits.substring(2);
+    }
+
+    // Ensure it starts with 0
+    if (!normalizedDigits.startsWith("0") && normalizedDigits.length > 0) {
+      normalizedDigits = "0" + normalizedDigits;
+    }
+
+    // Format with spaces for readability
+    if (normalizedDigits.length <= 4) {
+      return normalizedDigits;
+    } else if (normalizedDigits.length <= 7) {
+      return `${normalizedDigits.slice(0, 4)} ${normalizedDigits.slice(4)}`;
     } else {
-      return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+      return `${normalizedDigits.slice(0, 4)} ${normalizedDigits.slice(
+        4,
+        7
+      )} ${normalizedDigits.slice(7, 11)}`;
     }
   };
 
@@ -119,42 +143,64 @@ function ProfileInfo() {
 
   const handlePhoneInputChange = (e) => {
     let value = e.target.value;
-    
+
     // Remove all non-numeric characters
-    value = value.replace(/\D/g, '');
-    
-    // Limit to 11 digits (Philippine phone number)
+    value = value.replace(/\D/g, "");
+
+    // Ensure the number starts with 0
+    if (value.length > 0 && !value.startsWith("0")) {
+      // If it starts with 63, replace it with 0
+      if (value.startsWith("63")) {
+        value = "0" + value.substring(2);
+      } else {
+        value = "0" + value;
+      }
+    }
+
+    // Limit to 11 digits (09XX XXX XXXX format)
     if (value.length > 11) {
       value = value.slice(0, 11);
     }
-    
+
     // Format the phone number as user types
-    let formattedValue = '';
+    let formattedValue = "";
     if (value.length > 0) {
       if (value.length <= 4) {
         formattedValue = value;
       } else if (value.length <= 7) {
         formattedValue = `${value.slice(0, 4)} ${value.slice(4)}`;
       } else {
-        formattedValue = `${value.slice(0, 4)} ${value.slice(4, 7)} ${value.slice(7)}`;
+        formattedValue = `${value.slice(0, 4)} ${value.slice(
+          4,
+          7
+        )} ${value.slice(7)}`;
       }
     }
-    
+
     setForm({ ...form, phone: formattedValue });
   };
 
   const handleSave = async () => {
     try {
       setLoading(true);
-      const phoneDigits = form.phone.replace(/\D/g, '');
-      
+      const phoneDigits = form.phone.replace(/\D/g, "");
+
+      // Ensure phone is stored in 09XXXXXXXX format (not 639XXXXXXXX)
+      // This makes it more user-friendly when viewing it later
+      let formattedPhone = phoneDigits;
+      if (formattedPhone.startsWith("63") && formattedPhone.length >= 12) {
+        formattedPhone = "0" + formattedPhone.substring(2);
+      } else if (!formattedPhone.startsWith("0") && formattedPhone.length > 0) {
+        formattedPhone = "0" + formattedPhone;
+      }
+
       const updateData = {
         user_id: user.user_id,
         first_name: form.firstName,
         last_name: form.lastName,
         email: form.email,
         username: form.username,
-        phone: phoneDigits,
+        phone: formattedPhone,
         profile_photo: preview || null,
       };
 
@@ -168,11 +214,11 @@ function ProfileInfo() {
       );
 
       const result = await res.json();
-      
+
       if (res.ok) {
         // Update user state with returned data
         setUser(result.user);
-        
+
         // Update localStorage
         const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
         const updatedStoredUser = {
@@ -184,23 +230,153 @@ function ProfileInfo() {
           phone: result.user.phone,
         };
         localStorage.setItem("user", JSON.stringify(updatedStoredUser));
-        
+
         setEditMode(false);
+        toast.success("Profile updated successfully!");
         console.log("Profile updated successfully");
       } else {
         console.error("Failed to update profile:", result.message);
-        alert("Failed to update profile: " + result.message);
+        toast.error("Failed to update profile: " + result.message);
       }
     } catch (err) {
       console.error("Profile update error:", err);
-      alert("Failed to update profile. Please try again.");
+      toast.error("Failed to update profile. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePhoneVerification = () => {
-    setUser({ ...user, phone_verification: true });
+  const handlePhoneVerification = async () => {
+    try {
+      // Fetch updated user profile to reflect phone verification status
+      const loggedInUser = JSON.parse(localStorage.getItem("user"));
+      const response = await fetch(
+        `${import.meta.env.VITE_SOCKET_API}/api/user-profile`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: loggedInUser.email,
+            username: loggedInUser.username,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data.user);
+        // Update localStorage as well
+        const updatedUser = { ...loggedInUser, phone_verification: true };
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+        toast.success(
+          "Phone verified successfully! You can now receive SMS notifications."
+        );
+      } else {
+        // Fallback: just update local state
+        setUser({ ...user, phone_verification: true });
+        toast.success("Phone verified successfully!");
+      }
+    } catch (error) {
+      console.error("Error fetching updated profile:", error);
+      // Fallback: just update local state
+      setUser({ ...user, phone_verification: true });
+      toast.success("Phone verified successfully!");
+    }
+  };
+
+  const handleVerifyPhoneClick = async () => {
+    if (!user.phone || user.phone === "0" || user.phone.trim() === "") {
+      toast.error("Please add a phone number first");
+      return;
+    }
+
+    if (user.phone_verification) {
+      return;
+    }
+
+    setSendingSms(true);
+
+    try {
+      const cleanPhone = user.phone.replace(/\D/g, "");
+      let phoneForAPI;
+
+      if (cleanPhone.startsWith("63")) {
+        phoneForAPI = cleanPhone;
+      } else if (cleanPhone.startsWith("09")) {
+        phoneForAPI = "63" + cleanPhone.substring(1);
+      } else if (cleanPhone.startsWith("9")) {
+        phoneForAPI = "63" + cleanPhone;
+      } else {
+        phoneForAPI = "63" + cleanPhone;
+      }
+
+      console.log("Sending SMS to:", phoneForAPI, "for user:", user.user_id);
+      console.log(
+        "Phone conversion:",
+        user.phone,
+        "->",
+        cleanPhone,
+        "->",
+        phoneForAPI
+      );
+      console.log("Full request details:", {
+        url: `${
+          import.meta.env.VITE_SOCKET_API
+        }/api/send-sms-verification-code`,
+        method: "POST",
+        body: { phone: phoneForAPI, userId: user.user_id },
+        env: import.meta.env.VITE_SOCKET_API,
+      });
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SOCKET_API}/api/send-sms-verification-code`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            phone: phoneForAPI,
+            userId: user.user_id,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("SMS sent successfully:", data);
+        setSendingSms(false);
+        setShowVerifyPhoneModal(true);
+        toast.success("Verification code sent successfully!");
+      } else {
+        setSendingSms(false);
+
+        // Handle non-JSON responses
+        let errorMessage = "Failed to send SMS";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (jsonError) {
+          // If response is not JSON, try to get text
+          try {
+            const errorText = await response.text();
+            errorMessage = errorText || `Server error (${response.status})`;
+          } catch (textError) {
+            errorMessage = `Server error (${response.status})`;
+          }
+        }
+
+        toast.error(`Failed to send SMS: ${errorMessage}`);
+      }
+    } catch (error) {
+      console.error("Error sending SMS:", error);
+      setSendingSms(false);
+      toast.error(
+        "Failed to send SMS verification code. Please check your connection and try again."
+      );
+    }
   };
 
   if (!user) {
@@ -224,6 +400,12 @@ function ProfileInfo() {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
           }
+          
+          @keyframes progressAnimation {
+            0% { width: 0%; }
+            50% { width: 100%; }
+            100% { width: 0%; }
+          }
         `}
       </style>
       <div className="d-flex justify-content-between align-items-center flex-wrap mb-4">
@@ -241,8 +423,8 @@ function ProfileInfo() {
       <div className="d-flex justify-content-center mb-4">
         <div
           className="d-flex flex-column align-items-center justify-content-center shadow border rounded-3 p-4 position-relative"
-          style={{ 
-            width: "240px", 
+          style={{
+            width: "240px",
             backgroundColor: "#ffffff",
             background: "linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)",
             borderColor: "#e9ecef",
@@ -250,12 +432,17 @@ function ProfileInfo() {
         >
           <div className="position-relative">
             <img
-              src={preview || (user.profile_photo ? `data:image/jpeg;base64,${user.profile_photo}` : "/avatar-default-icon.png")}
+              src={
+                preview ||
+                (user.profile_photo
+                  ? `data:image/jpeg;base64,${user.profile_photo}`
+                  : "/avatar-default-icon.png")
+              }
               alt="Avatar"
               className="rounded-circle border"
-              style={{ 
-                width: "140px", 
-                height: "140px", 
+              style={{
+                width: "140px",
+                height: "140px",
                 objectFit: "cover",
                 borderWidth: "4px",
                 borderColor: "#ffffff",
@@ -263,7 +450,7 @@ function ProfileInfo() {
               }}
             />
             {editMode && (
-              <div 
+              <div
                 className="position-absolute rounded-circle d-flex align-items-center justify-content-center"
                 style={{
                   bottom: "8px",
@@ -282,16 +469,13 @@ function ProfileInfo() {
 
           {!editMode && (
             <div className="mt-3 text-center">
-              <div 
-                className="fw-bold text-dark mb-1" 
+              <div
+                className="fw-bold text-dark mb-1"
                 style={{ fontSize: "1.1rem" }}
               >
                 @{user.username}
               </div>
-              <div 
-                className="small text-muted"
-                style={{ fontSize: "0.85rem" }}
-              >
+              <div className="small text-muted" style={{ fontSize: "0.85rem" }}>
                 {user.first_name} {user.last_name}
               </div>
             </div>
@@ -332,18 +516,20 @@ function ProfileInfo() {
                       transition: "all 0.2s ease",
                       boxShadow: "0 2px 8px rgba(0, 123, 255, 0.15)",
                     }}
-                    onClick={() => openCamera('camera-input')}
+                    onClick={() => openCamera("camera-input")}
                     onMouseEnter={(e) => {
                       e.target.style.backgroundColor = "#007bff";
                       e.target.style.color = "#ffffff";
                       e.target.style.transform = "translateY(-2px)";
-                      e.target.style.boxShadow = "0 4px 12px rgba(0, 123, 255, 0.25)";
+                      e.target.style.boxShadow =
+                        "0 4px 12px rgba(0, 123, 255, 0.25)";
                     }}
                     onMouseLeave={(e) => {
                       e.target.style.backgroundColor = "#ffffff";
                       e.target.style.color = "#007bff";
                       e.target.style.transform = "translateY(0)";
-                      e.target.style.boxShadow = "0 2px 8px rgba(0, 123, 255, 0.15)";
+                      e.target.style.boxShadow =
+                        "0 2px 8px rgba(0, 123, 255, 0.15)";
                     }}
                   >
                     <FaCamera size={18} className="mb-1" />
@@ -365,18 +551,22 @@ function ProfileInfo() {
                       transition: "all 0.2s ease",
                       boxShadow: "0 2px 8px rgba(40, 167, 69, 0.15)",
                     }}
-                    onClick={() => document.getElementById("upload-input").click()}
+                    onClick={() =>
+                      document.getElementById("upload-input").click()
+                    }
                     onMouseEnter={(e) => {
                       e.target.style.backgroundColor = "#28a745";
                       e.target.style.color = "#ffffff";
                       e.target.style.transform = "translateY(-2px)";
-                      e.target.style.boxShadow = "0 4px 12px rgba(40, 167, 69, 0.25)";
+                      e.target.style.boxShadow =
+                        "0 4px 12px rgba(40, 167, 69, 0.25)";
                     }}
                     onMouseLeave={(e) => {
                       e.target.style.backgroundColor = "#ffffff";
                       e.target.style.color = "#28a745";
                       e.target.style.transform = "translateY(0)";
-                      e.target.style.boxShadow = "0 2px 8px rgba(40, 167, 69, 0.15)";
+                      e.target.style.boxShadow =
+                        "0 2px 8px rgba(40, 167, 69, 0.15)";
                     }}
                   >
                     <FaImage size={18} className="mb-1" />
@@ -614,7 +804,7 @@ function ProfileInfo() {
                   : "btn-outline-primary"
               }`}
               style={{ top: "10px", right: "10px", fontSize: "0.75rem" }}
-              onClick={() => setShowVerifyPhoneModal(true)}
+              onClick={handleVerifyPhoneClick}
             >
               {user.phone_verification ? "Verified" : "Verify"}
             </button>
@@ -631,8 +821,15 @@ function ProfileInfo() {
                 Phone Verification
               </h6>
               <p className="small text-muted mb-0">
-                You have entered <strong>{user.phone}</strong> as your phone
-                number.
+                You have entered{" "}
+                <strong>
+                  {user.phone
+                    ? `+${user.phone
+                        .replace(/^63/, "63 ")
+                        .replace(/(\d{3})(\d{3})(\d{4})$/, "$1 $2 $3")}`
+                    : ""}
+                </strong>{" "}
+                as your phone number.
                 <br />
                 {user.phone_verification
                   ? "Your phone is verified."
@@ -643,17 +840,75 @@ function ProfileInfo() {
         </div>
       </div>
 
+      {sendingSms && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            zIndex: 1050,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <div
+            className="text-center p-4 rounded"
+            style={{
+              backgroundColor: "#fff",
+              maxWidth: "400px",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+            }}
+          >
+            <div className="mb-3">
+              <div
+                className="spinner-border text-primary"
+                style={{ width: "3rem", height: "3rem" }}
+                role="status"
+              >
+                <span className="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            <h5 style={{ color: "#5c4033", marginBottom: "0.5rem" }}>
+              Sending SMS Verification
+            </h5>
+            <p className="text-muted mb-0" style={{ fontSize: "0.9rem" }}>
+              Please wait while we send a verification code to{" "}
+              <strong>{user.phone}</strong>
+            </p>
+            <div className="mt-3">
+              <div
+                className="progress"
+                style={{ height: "4px", borderRadius: "2px" }}
+              >
+                <div
+                  className="progress-bar"
+                  style={{
+                    backgroundColor: "#5c4033",
+                    animation: "progressAnimation 2s ease-in-out infinite",
+                  }}
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showVerifyPhoneModal && (
         <VerifyPhoneModal
           phone={user.phone}
+          userId={user.user_id}
           onClose={() => setShowVerifyPhoneModal(false)}
           onVerify={handlePhoneVerification}
         />
       )}
 
       {/* Camera Component */}
-      <CameraComponent 
-        onCapture={(dataUrl, imageUrl) => handleImageCapture(dataUrl, imageUrl)} 
+      <CameraComponent
+        onCapture={(dataUrl, imageUrl) => handleImageCapture(dataUrl, imageUrl)}
       />
     </>
   );

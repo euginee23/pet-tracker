@@ -86,27 +86,246 @@ function App() {
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "linear-gradient(135deg, #f3e7dd, #d6c3b4)",
+          background: "linear-gradient(135deg, #f3e7dd 0%, #e8d5c8 25%, #d6c3b4 50%, #c4a484 75%, #b8996d 100%)",
           overflow: "hidden",
         }}
       >
-        {/* Optional abstract blob shapes */}
-        <svg
+        <div
           style={{
             position: "absolute",
-            top: "-10%",
-            left: "-10%",
-            width: "400px",
-            opacity: 0.2,
+            width: "100%",
+            height: "100%",
+            overflow: "hidden",
           }}
-          viewBox="0 0 200 200"
         >
-          <path
-            fill="#c4a484"
-            d="M40,-70.2C52.5,-62.9,62.8,-52.5,67.9,-40.3C73,-28.1,72.9,-14,73.2,0.3C73.6,14.7,74.3,29.5,67.3,39.6C60.4,49.7,45.9,55.1,32.5,62.7C19.1,70.3,6.7,80.2,-5.9,87C-18.5,93.8,-37.1,97.5,-49.9,90.1C-62.7,82.7,-69.7,64.3,-70.8,48C-72,31.7,-67.2,17.4,-66.1,3.7C-65.1,-10.1,-67.7,-20.2,-63.7,-28.6C-59.7,-37,-49.2,-43.7,-38.2,-50.4C-27.3,-57.1,-13.6,-63.8,0.4,-64.4C14.5,-65.1,29.1,-59.5,40,-70.2Z"
-            transform="translate(100 100)"
+          <div
+            style={{
+              position: "absolute",
+              top: "-15%",
+              left: "-15%",
+              width: "500px",
+              height: "500px",
+              background: "radial-gradient(circle, rgba(196, 164, 132, 0.3) 0%, rgba(196, 164, 132, 0.1) 70%, transparent 100%)",
+              borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%",
+              animation: "float 20s ease-in-out infinite",
+            }}
           />
-        </svg>
+          
+          <div
+            style={{
+              position: "absolute",
+              top: "60%",
+              right: "-20%",
+              width: "600px",
+              height: "400px",
+              background: "radial-gradient(ellipse, rgba(184, 153, 109, 0.25) 0%, rgba(184, 153, 109, 0.08) 70%, transparent 100%)",
+              borderRadius: "30% 70% 70% 30% / 30% 40% 60% 70%",
+              animation: "float 25s ease-in-out infinite reverse",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              bottom: "-10%",
+              left: "20%",
+              width: "350px",
+              height: "350px",
+              background: "radial-gradient(circle, rgba(212, 195, 180, 0.4) 0%, rgba(212, 195, 180, 0.1) 60%, transparent 100%)",
+              borderRadius: "70% 30% 50% 50% / 60% 40% 60% 40%",
+              animation: "float 18s ease-in-out infinite",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              top: "-20%",
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: "450px",
+              height: "450px",
+              background: "radial-gradient(circle, rgba(196, 164, 132, 0.2) 0%, rgba(196, 164, 132, 0.05) 65%, transparent 100%)",
+              borderRadius: "40% 60% 60% 40% / 70% 30% 70% 30%",
+              animation: "float 24s ease-in-out infinite",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              top: "40%",
+              left: "-10%",
+              width: "380px",
+              height: "320px",
+              background: "radial-gradient(ellipse, rgba(184, 153, 109, 0.2) 0%, rgba(184, 153, 109, 0.06) 70%, transparent 100%)",
+              borderRadius: "50% 50% 60% 40% / 30% 70% 30% 70%",
+              animation: "float 22s ease-in-out infinite reverse",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              bottom: "-5%",
+              right: "-15%",
+              width: "400px",
+              height: "350px",
+              background: "radial-gradient(circle, rgba(212, 195, 180, 0.3) 0%, rgba(212, 195, 180, 0.08) 65%, transparent 100%)",
+              borderRadius: "80% 20% 40% 60% / 50% 60% 40% 50%",
+              animation: "float 19s ease-in-out infinite",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              top: "35%",
+              left: "45%",
+              width: "250px",
+              height: "250px",
+              background: "radial-gradient(circle, rgba(196, 164, 132, 0.15) 0%, rgba(196, 164, 132, 0.03) 70%, transparent 100%)",
+              borderRadius: "60% 40% 80% 20% / 40% 60% 40% 60%",
+              animation: "float 16s ease-in-out infinite reverse",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              top: "25%",
+              right: "15%",
+              width: "200px",
+              height: "200px",
+              background: "conic-gradient(from 45deg, rgba(196, 164, 132, 0.2), rgba(184, 153, 109, 0.15), rgba(212, 195, 180, 0.2))",
+              borderRadius: "50% 20% 80% 20%",
+              animation: "rotate 30s linear infinite",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              bottom: "20%",
+              left: "10%",
+              width: "180px",
+              height: "180px",
+              background: "conic-gradient(from 135deg, rgba(184, 153, 109, 0.18), rgba(212, 195, 180, 0.12), rgba(196, 164, 132, 0.18))",
+              borderRadius: "20% 80% 20% 80%",
+              animation: "rotate 35s linear infinite reverse",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              top: "15%",
+              left: "75%",
+              width: "160px",
+              height: "160px",
+              background: "radial-gradient(circle, transparent 40%, rgba(196, 164, 132, 0.2) 42%, rgba(196, 164, 132, 0.2) 58%, transparent 60%)",
+              borderRadius: "50%",
+              animation: "float 26s ease-in-out infinite",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              top: "10%",
+              left: "60%",
+              width: "150px",
+              height: "150px",
+              background: "linear-gradient(45deg, rgba(196, 164, 132, 0.2) 25%, transparent 25%, transparent 75%, rgba(196, 164, 132, 0.2) 75%)",
+              backgroundSize: "30px 30px",
+              borderRadius: "20%",
+              animation: "float 15s ease-in-out infinite",
+              transform: "rotate(45deg)",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              top: "5%",
+              right: "5%",
+              width: "120px",
+              height: "120px",
+              background: "linear-gradient(135deg, rgba(184, 153, 109, 0.15) 25%, transparent 25%, transparent 75%, rgba(184, 153, 109, 0.15) 75%)",
+              backgroundSize: "20px 20px",
+              borderRadius: "30%",
+              animation: "float 21s ease-in-out infinite reverse",
+              transform: "rotate(-30deg)",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              bottom: "30%",
+              right: "30%",
+              width: "300px",
+              height: "300px",
+              background: "radial-gradient(circle at 25% 25%, rgba(196, 164, 132, 0.3) 2px, transparent 2px)",
+              backgroundSize: "20px 20px",
+              borderRadius: "50%",
+              opacity: 0.6,
+              animation: "float 22s ease-in-out infinite reverse",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              top: "20%",
+              left: "5%",
+              width: "200px",
+              height: "200px",
+              background: "radial-gradient(circle at 50% 50%, rgba(184, 153, 109, 0.25) 1.5px, transparent 1.5px)",
+              backgroundSize: "15px 15px",
+              borderRadius: "60%",
+              opacity: 0.5,
+              animation: "float 17s ease-in-out infinite",
+            }}
+          />
+          
+          <div
+            style={{
+              position: "absolute",
+              bottom: "10%",
+              left: "60%",
+              width: "280px",
+              height: "140px",
+              background: "linear-gradient(90deg, rgba(212, 195, 180, 0.2) 0%, rgba(196, 164, 132, 0.15) 50%, rgba(184, 153, 109, 0.1) 100%)",
+              borderRadius: "50% 50% 0 0",
+              animation: "float 23s ease-in-out infinite",
+              transform: "rotate(-15deg)",
+            }}
+          />
+        </div>
+        
+        <style>{`
+          @keyframes float {
+            0%, 100% {
+              transform: translateY(0px) rotate(0deg);
+            }
+            33% {
+              transform: translateY(-20px) rotate(2deg);
+            }
+            66% {
+              transform: translateY(10px) rotate(-1deg);
+            }
+          }
+          
+          @keyframes rotate {
+            0% {
+              transform: rotate(0deg);
+            }
+            100% {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
       </div>
       {/* Show Navbar only for authenticated users and protected pages */}
       {isAuthenticated &&
@@ -165,12 +384,12 @@ function App() {
               </ProtectedRoute>
             }
           />
-          {/* 404 Not Found - This should be the last route */}
+          {/* 404 NOT FOUND*/}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
       
-      {/* Global Footer */}
+      {/* GLOBAL FOOTER */}
       <div style={{
         backgroundColor: '#212529',
         color: 'white',
