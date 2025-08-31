@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 
-const ShowMyLocationToggle = ({ value = false, onChange }) => {
+const ShowMyLocationToggle = ({ value = false, onChange, disabled = false }) => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 480);
 
   const toggle = () => {
-    onChange?.(!value);
+    if (!disabled) {
+      onChange?.(!value);
+    }
   };
 
   useEffect(() => {
@@ -24,14 +26,15 @@ const ShowMyLocationToggle = ({ value = false, onChange }) => {
       onClick={toggle}
       role="switch"
       aria-checked={value}
+      aria-disabled={disabled}
       aria-label="Toggle My Location"
       style={{
         width: `${trackWidth}px`,
         height: trackHeight,
         borderRadius: "999px",
-        backgroundColor: value ? "#28a745" : "#ccc",
+        backgroundColor: disabled ? "#e9ecef" : value ? "#28a745" : "#ccc",
         position: "relative",
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
         display: "flex",
         alignItems: "center",
         justifyContent: value ? "flex-start" : "flex-end",
@@ -40,6 +43,7 @@ const ShowMyLocationToggle = ({ value = false, onChange }) => {
         fontWeight: "bold",
         userSelect: "none",
         transition: "background-color 0.2s ease",
+        opacity: disabled ? 0.7 : 1,
       }}
     >
       <span

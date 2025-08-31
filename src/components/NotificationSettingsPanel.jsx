@@ -34,6 +34,7 @@ function NotificationSettingsPanel() {
   });
   const [loading, setLoading] = useState(true);
   const [userPhone, setUserPhone] = useState("");
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -42,12 +43,26 @@ function NotificationSettingsPanel() {
       const user = JSON.parse(storedUser);
       setUserPhone(user.phone);
 
-      // FETCH SMS SETTINGS
+      // FETCH USER'S PHONE VERIFICATION STATUS
       setLoading(true);
+      
       axios
-        .get(
-          `${import.meta.env.VITE_SOCKET_API}/api/sms-notification-settings/${user.userId}`
+        .post(
+          `${import.meta.env.VITE_SOCKET_API}/api/user-profile`,
+          { email: user.email || '', username: user.username || '' }
         )
+        .then((profileResponse) => {
+          if (profileResponse.data && profileResponse.data.user && profileResponse.data.user.phone_verification !== undefined) {
+            setPhoneVerified(profileResponse.data.user.phone_verification === true || 
+                             profileResponse.data.user.phone_verification === 1 || 
+                             profileResponse.data.user.phone_verification === "1");
+          }
+          
+          // FETCH SMS SETTINGS
+          return axios.get(
+            `${import.meta.env.VITE_SOCKET_API}/api/sms-notification-settings/${user.userId}`
+          );
+        })
         .then((response) => {
           if (response.data.length > 0) {
             const settingsData = response.data[0];
@@ -90,7 +105,16 @@ function NotificationSettingsPanel() {
           }
         })
         .catch((error) => {
-          console.error("Error fetching SMS notification settings:", error);
+          console.error("Error fetching user data or SMS notification settings:", error);
+          
+          setPhoneVerified(false);
+          
+          return axios.get(
+            `${import.meta.env.VITE_SOCKET_API}/api/sms-notification-settings/${user.userId}`
+          ).catch(err => {
+            console.error("Error fetching SMS settings after profile check failed:", err);
+            return { data: [] };
+          });
         })
         .finally(() => {
           setLoading(false);
@@ -101,6 +125,11 @@ function NotificationSettingsPanel() {
   }, []);
 
   const handleToggle = (type, value) => {
+    if (type === "smsNotifications" && value === true && !phoneVerified) {
+      toast.warning("Please verify your phone number first to enable SMS notifications");
+      return;
+    }
+    
     setSettings((prev) => ({ ...prev, [type]: value }));
   };
 
@@ -137,6 +166,11 @@ function NotificationSettingsPanel() {
   const saveSettings = () => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
+      if (settings.smsNotifications && !phoneVerified) {
+        toast.error("Cannot enable SMS notifications without a verified phone number");
+        return;
+      }
+
       const user = JSON.parse(storedUser);
       setSaving(true);
       axios
@@ -149,7 +183,7 @@ function NotificationSettingsPanel() {
             out_geofence: settings.smsOptions.trackerOutGeofence,
             in_geofence: settings.smsOptions.trackerInGeofence,
             low_battery: settings.smsOptions.trackerBatteryLow,
-            nearby_pet: settings.nearbyPetsOptions.enabled, // Use the actual toggle state
+            nearby_pet: settings.nearbyPetsOptions.enabled, 
             meter_radius: settings.nearbyPetsOptions.detectionRadius,
           }
         )
@@ -159,6 +193,7 @@ function NotificationSettingsPanel() {
         })
         .catch((error) => {
           console.error("Error saving SMS notification settings:", error);
+          toast.error("Failed to save settings. Please try again.");
         })
         .finally(() => {
           setSaving(false);
@@ -185,7 +220,6 @@ function NotificationSettingsPanel() {
       ? formatPhilippinePhone(userPhone)
       : "No phone number available";
 
-  // Helper to compare settings
   const isSettingsEqual = (a, b) => {
     if (a.smsNotifications !== b.smsNotifications) return false;
     if (a.nearbyPetsOptions.enabled !== b.nearbyPetsOptions.enabled) return false;
@@ -222,8 +256,19 @@ function NotificationSettingsPanel() {
         <ShowMyLocationToggle
           value={settings.smsNotifications}
           onChange={(enabled) => handleToggle("smsNotifications", enabled)}
+          disabled={!phoneVerified}
         />
+        {!phoneVerified && (
+          <span className="ms-2 badge bg-warning text-dark">Unverified Phone</span>
+        )}
       </div>
+
+      {!phoneVerified && (
+        <p className="small text-danger mt-1">
+          Please verify your phone number in the Profile tab to enable SMS notifications.
+          {loading && <span className="ms-2"><small>(Checking verification status...)</small></span>}
+        </p>
+      )}
 
       {settings.smsNotifications && (
         <>
