@@ -13,6 +13,10 @@ function NotificationSettingsPanel() {
       trackerInGeofence: false,
       trackerBatteryLow: false,
     },
+    nearbyPetsOptions: {
+      enabled: false, 
+      detectionRadius: 100, 
+    },
   });
   const [lastSavedSettings, setLastSavedSettings] = useState({
     smsNotifications: false,
@@ -22,6 +26,10 @@ function NotificationSettingsPanel() {
       trackerOutGeofence: false,
       trackerInGeofence: false,
       trackerBatteryLow: false,
+    },
+    nearbyPetsOptions: {
+      enabled: false, 
+      detectionRadius: 100, 
     },
   });
   const [loading, setLoading] = useState(true);
@@ -53,6 +61,10 @@ function NotificationSettingsPanel() {
                 trackerInGeofence: toBool(settingsData.in_geofence),
                 trackerBatteryLow: toBool(settingsData.low_battery),
               },
+              nearbyPetsOptions: {
+                enabled: toBool(settingsData.nearby_pet), // Load from database
+                detectionRadius: settingsData.meter_radius || 100, // Load from database
+              },
             };
             setSettings(loadedSettings);
             setLastSavedSettings(loadedSettings);
@@ -68,6 +80,8 @@ function NotificationSettingsPanel() {
                   out_geofence: false,
                   in_geofence: false,
                   low_battery: false,
+                  nearby_pet: false,
+                  meter_radius: 100,
                 }
               )
               .catch((error) => {
@@ -100,6 +114,26 @@ function NotificationSettingsPanel() {
     }));
   };
 
+  const handleNearbyPetsRadiusChange = (radius) => {
+    setSettings((prev) => ({
+      ...prev,
+      nearbyPetsOptions: {
+        ...prev.nearbyPetsOptions,
+        detectionRadius: radius,
+      },
+    }));
+  };
+
+  const handleNearbyPetsToggle = (enabled) => {
+    setSettings((prev) => ({
+      ...prev,
+      nearbyPetsOptions: {
+        ...prev.nearbyPetsOptions,
+        enabled: enabled,
+      },
+    }));
+  };
+
   const saveSettings = () => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
@@ -115,6 +149,8 @@ function NotificationSettingsPanel() {
             out_geofence: settings.smsOptions.trackerOutGeofence,
             in_geofence: settings.smsOptions.trackerInGeofence,
             low_battery: settings.smsOptions.trackerBatteryLow,
+            nearby_pet: settings.nearbyPetsOptions.enabled, // Use the actual toggle state
+            meter_radius: settings.nearbyPetsOptions.detectionRadius,
           }
         )
         .then(() => {
@@ -152,6 +188,8 @@ function NotificationSettingsPanel() {
   // Helper to compare settings
   const isSettingsEqual = (a, b) => {
     if (a.smsNotifications !== b.smsNotifications) return false;
+    if (a.nearbyPetsOptions.enabled !== b.nearbyPetsOptions.enabled) return false;
+    if (a.nearbyPetsOptions.detectionRadius !== b.nearbyPetsOptions.detectionRadius) return false;
     const keys = [
       "trackerOnline",
       "trackerOffline",
@@ -195,7 +233,7 @@ function NotificationSettingsPanel() {
 
           <div className="mt-3">
             <h6 className="mb-2" style={{ color: "#5c4033" }}>
-              SMS Notification Options
+              Tracker Notification Options
             </h6>
 
             <div className="form-check mb-2">
@@ -261,6 +299,72 @@ function NotificationSettingsPanel() {
               <label className="form-check-label" htmlFor="trackerBatteryLow">
                 Tracker battery low (20%)
               </label>
+            </div>
+
+            {/* NEARBY PETS / USERS NOTIFICATION OPTIONS */}
+            <div className="mt-4">
+              <h6 className="mb-2" style={{ color: "#5c4033" }}>
+                Nearby Pets / Users Notification Options
+              </h6>
+
+              <div className="form-check mb-3">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="nearbyPetAlert"
+                  checked={settings.nearbyPetsOptions.enabled}
+                  onChange={(e) => handleNearbyPetsToggle(e.target.checked)}
+                />
+                <label className="form-check-label" htmlFor="nearbyPetAlert">
+                  Notify when another pet is nearby
+                </label>
+              </div>
+
+              {/* DETECTION RADIUS SLIDER - Only show when nearby pets is enabled */}
+              {settings.nearbyPetsOptions.enabled && (
+                <div className="mb-3">
+                  <label className="form-label" style={{ color: "#5c4033", fontWeight: "600" }}>
+                    Detection Radius: {settings.nearbyPetsOptions.detectionRadius} meters
+                  </label>
+                  <div className="d-flex align-items-center gap-3">
+                    <span className="small text-muted">10m</span>
+                    <input
+                      type="range"
+                      className="form-range flex-grow-1"
+                      min="10"
+                      max="100"
+                      step="10"
+                      value={settings.nearbyPetsOptions.detectionRadius}
+                      onChange={(e) => handleNearbyPetsRadiusChange(parseInt(e.target.value))}
+                      style={{
+                        accentColor: "#28a745",
+                      }}
+                    />
+                    <span className="small text-muted">100m</span>
+                  </div>
+                  <div className="mt-2">
+                    <input
+                      type="number"
+                      className="form-control form-control-sm"
+                      placeholder="Enter distance in meters"
+                      min="10"
+                      max="100"
+                      value={settings.nearbyPetsOptions.detectionRadius}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        if (value >= 10 && value <= 100) {
+                          handleNearbyPetsRadiusChange(value);
+                        }
+                      }}
+                      style={{
+                        maxWidth: "200px",
+                        fontSize: "0.85rem",
+                      }}
+                    />
+                    <small className="text-muted">Range: 10 - 100 meters</small>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </>

@@ -14,8 +14,10 @@ const ShowMyLocationToggle = ({ value = false, onChange }) => {
     return () => mediaQuery.removeEventListener("change", handleResize);
   }, []);
 
-  const trackWidth = isMobile ? 63 : 56;
-  const knobLeft = value ? "31px" : "3px";
+  const trackWidth = isMobile ? 40 : 50;
+  const trackHeight = isMobile ? "20px" : "24px";
+  const knobSize = isMobile ? 16 : 20;
+  const knobLeft = value ? (isMobile ? "22px" : "28px") : "2px";
 
   return (
     <div
@@ -25,7 +27,7 @@ const ShowMyLocationToggle = ({ value = false, onChange }) => {
       aria-label="Toggle My Location"
       style={{
         width: `${trackWidth}px`,
-        height: "28px",
+        height: trackHeight,
         borderRadius: "999px",
         backgroundColor: value ? "#28a745" : "#ccc",
         position: "relative",
@@ -33,8 +35,8 @@ const ShowMyLocationToggle = ({ value = false, onChange }) => {
         display: "flex",
         alignItems: "center",
         justifyContent: value ? "flex-start" : "flex-end",
-        padding: "0 6px",
-        fontSize: "11px",
+        padding: isMobile ? "0 3px" : "0 5px",
+        fontSize: isMobile ? "8px" : "9px",
         fontWeight: "bold",
         userSelect: "none",
         transition: "background-color 0.2s ease",
@@ -46,6 +48,8 @@ const ShowMyLocationToggle = ({ value = false, onChange }) => {
           color: "#fff",
           transition: "opacity 0.2s",
           pointerEvents: "none",
+          marginLeft: value ? (isMobile ? "2px" : "4px") : "0",
+          marginRight: value ? "0" : (isMobile ? "2px" : "4px"),
         }}
       >
         {value ? "ON" : "OFF"}
@@ -54,14 +58,14 @@ const ShowMyLocationToggle = ({ value = false, onChange }) => {
       <div
         style={{
           position: "absolute",
-          top: "3px",
+          top: "2px",
           left: knobLeft,
-          width: "22px",
-          height: "22px",
+          width: `${knobSize}px`,
+          height: `${knobSize}px`,
           borderRadius: "50%",
           background: "#fff",
-          transition: "left 0.25s ease",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+          transition: "left 0.3s ease",
+          boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
         }}
       />
     </div>

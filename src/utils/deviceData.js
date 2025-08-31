@@ -2,36 +2,60 @@ import io from 'socket.io-client';
 
 const BACKEND_URL = import.meta.env.VITE_SOCKET_API;
 let socket = null;
+let isInitializing = false;
 
-export const initializeSocket = () => {
-  if (!socket) {
-    socket = io(BACKEND_URL, {
-      secure: true,
-      transports: ['polling', 'websocket'],
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000
-    });
-    
-    socket.on('connect', () => {
-      console.log('Connected to device tracking server');
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.log('Disconnected from device tracking server:', reason);
-    });
-
-    socket.on('connect_error', (error) => {
-      console.error('❌ Device socket connection error:', error.message);
-    });
+export const initializeSocket = (userId) => {
+  if (socket || isInitializing) {
+    return socket;
   }
+  
+  isInitializing = true;
+  
+  // Get userId from parameter or localStorage
+  const storedUser = localStorage.getItem("user");
+  const finalUserId = userId || 
+    JSON.parse(storedUser || "{}")?.user_id ||
+    JSON.parse(storedUser || "{}")?.userId;
+
+  if (!finalUserId) {
+    console.error("❌ Cannot initialize socket: userId is required");
+    isInitializing = false;
+    return null;
+  }
+
+  socket = io(BACKEND_URL, {
+    query: { userId: finalUserId },
+    secure: true,
+    transports: ['polling', 'websocket'],
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    timeout: 20000
+  });
+  
+  socket.on('connect', () => {
+    console.log('Connected to device tracking server');
+    isInitializing = false;
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log('Disconnected from device tracking server:', reason);
+  });
+
+  socket.on('connect_error', (error) => {
+    console.error('❌ Device socket connection error:', error.message);
+    isInitializing = false;
+  });
+  
   return socket;
 };
 
-export const subscribeToDevices = (callback) => {
-  if (!socket) initializeSocket();
+export const subscribeToDevices = (callback, userId = null) => {
+  if (!socket) initializeSocket(userId);
+  
+  // Remove any existing listeners before adding new ones
+  socket.off('devices');
   
   socket.on('devices', (deviceList) => {
     console.log('📡 Received device data:', deviceList.length, 'devices');
@@ -151,6 +175,7 @@ export const disconnectSocket = () => {
   if (socket) {
     socket.disconnect();
     socket = null;
+    isInitializing = false;
     console.log('🛑 Device socket disconnected and cleared');
   }
 };

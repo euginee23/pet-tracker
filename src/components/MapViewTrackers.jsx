@@ -7,7 +7,8 @@ import {
   fetchSavedTrackers, 
   simulateMovement, 
   getConnectionStatus,
-  initializeSocket
+  initializeSocket,
+  disconnectSocket
 } from "../utils/deviceData";
 
 function formatDuration(ms) {
@@ -34,6 +35,11 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
   const [showPopover, setShowPopover] = useState(false);
 
   const firstSeenRef = useRef({});
+  const lastKnownPositionsRef = useRef({});
+  
+  // Refs to store current values without causing re-renders
+  const savedTrackersRef = useRef([]);
+  const visibleTrackerIdsRef = useRef([]);
 
   const [simulating, setSimulating] = useState(true);
 
@@ -159,12 +165,21 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const lastKnownPositionsRef = useRef({});
-
   // Setup socket connection immediately when component mounts
   useEffect(() => {
-    // Initialize socket connection
-    initializeSocket();
+    // Get user ID from local storage
+    const storedUser = localStorage.getItem("user");
+    const userId =
+      JSON.parse(storedUser || "{}")?.user_id ||
+      JSON.parse(storedUser || "{}")?.userId;
+
+    if (!userId) {
+      console.error("❌ Cannot initialize socket: userId is required");
+      return;
+    }
+
+    // Initialize socket connection with userId
+    initializeSocket(userId);
     
     const statusInterval = setInterval(() => {
       setConnectionStatus(getConnectionStatus());
@@ -180,6 +195,17 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
     // Only subscribe to socket updates if we have savedTrackers
     if (!savedReady) return;
     
+    // Get user ID for socket subscription
+    const storedUser = localStorage.getItem("user");
+    const userId =
+      JSON.parse(storedUser || "{}")?.user_id ||
+      JSON.parse(storedUser || "{}")?.userId;
+
+    if (!userId) {
+      console.error("❌ Cannot subscribe to devices: userId is required");
+      return;
+    }
+    
     console.log('🔌 Setting up socket subscription with', savedTrackers.length, 'saved trackers');
     
     const unsubscribe = subscribeToDevices((deviceList) => {
@@ -190,8 +216,8 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
         const isOnline = now - d.lastSeen <= CHECK_INTERVAL;
         if (isOnline && !firstSeenRef.current[d.deviceId]) {
           firstSeenRef.current[d.deviceId] = d.lastSeen;
-        }
-
+        }        
+        
         if (d.lat && d.lng) {
           if (!lastKnownPositionsRef.current[d.deviceId]) {
             lastKnownPositionsRef.current[d.deviceId] = {};
@@ -213,7 +239,11 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
         };
       });
 
-      const finalDevices = savedTrackers.map((tracker) => {
+      // Use refs to get current values without causing re-renders
+      const currentSavedTrackers = savedTrackersRef.current;
+      const currentVisibleTrackerIds = visibleTrackerIdsRef.current;
+
+      const finalDevices = currentSavedTrackers.map((tracker) => {
         const live = liveMap[tracker.device_id];
         const isOnline = live?.online;
         const lastKnown = lastKnownPositionsRef.current[tracker.device_id];
@@ -239,20 +269,29 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
       });
 
       const filtered = finalDevices.filter((d) =>
-        visibleTrackerIds.includes(d.deviceId)
+        currentVisibleTrackerIds.includes(d.deviceId)
       );
 
       console.log('📡 Updating devices from socket with', filtered.length, 'filtered devices');
       setDevices(filtered);
       setSocketReady(true);
       setConnectionStatus(getConnectionStatus());
-    });
+    }, userId);
 
     return () => {
       console.log('🔌 Unsubscribing from socket updates');
       unsubscribe();
     };
-  }, [savedTrackers, visibleTrackerIds, savedReady]);
+  }, [savedReady]); // Only depend on savedReady, not the tracker arrays
+
+  // Update refs when state changes
+  useEffect(() => {
+    savedTrackersRef.current = savedTrackers;
+  }, [savedTrackers]);
+
+  useEffect(() => {
+    visibleTrackerIdsRef.current = visibleTrackerIds;
+  }, [visibleTrackerIds]);
 
   // Initialize devices when saved trackers are loaded
   useEffect(() => {
@@ -290,6 +329,11 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.1); }
+      100% { opacity: 1; transform: scale(1); }
+    }
   `;
     document.head.appendChild(style);
 
@@ -297,6 +341,9 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
       if (document.head.contains(style)) {
         document.head.removeChild(style);
       }
+      
+      // Cleanup socket connection when component unmounts
+      disconnectSocket();
     };
   }, []);
 

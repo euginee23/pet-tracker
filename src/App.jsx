@@ -16,6 +16,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import EmailVerification from "./pages/EmailVerification";
 import Settings from "./pages/Settings";
+import NotFound from "./pages/NotFound";
 import Navbar from "./components/Navbar";
 
 function App() {
@@ -164,6 +165,8 @@ function App() {
               </ProtectedRoute>
             }
           />
+          {/* 404 Not Found - This should be the last route */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
       

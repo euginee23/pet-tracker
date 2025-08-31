@@ -39,24 +39,31 @@ function Navbar({ onLogout }) {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   useEffect(() => {
-    // Initialize socket and fetch initial notifications
-    const socket = initializeSocket();
+    // Get user ID from local storage
+    const userData = localStorage.getItem('user');
+    let userId = null;
+    
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        userId = parsedUser.userId || parsedUser.user_id;
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+        return;
+      }
+    }
+
+    if (!userId) {
+      console.error("❌ Cannot initialize notifications: userId is required");
+      return;
+    }
+
+    // Initialize socket with userId
+    const socket = initializeSocket(userId);
+    if (!socket) return;
     
     const loadNotifications = async () => {
       setIsLoading(true);
-      // Get user ID from local storage if available
-      const userData = localStorage.getItem('user');
-      let userId = null;
-      
-      if (userData) {
-        try {
-          const parsedUser = JSON.parse(userData);
-          userId = parsedUser.id || parsedUser.user_id;
-        } catch (error) {
-          console.error("Error parsing user data:", error);
-        }
-      }
-      
       const fetchedNotifications = await fetchNotifications(userId);
       setNotifications(fetchedNotifications);
       setIsLoading(false);
@@ -64,10 +71,10 @@ function Navbar({ onLogout }) {
 
     loadNotifications();
 
-    // Subscribe to new notifications
+    // Subscribe to new notifications with userId
     const unsubscribe = subscribeToNotifications((newNotification) => {
       setNotifications(prev => [newNotification, ...prev]);
-    });
+    }, userId);
 
     return () => {
       unsubscribe();

@@ -15,6 +15,8 @@ import "leaflet-geometryutil";
 import * as turf from "@turf/turf";
 
 import { toast } from "react-toastify";
+import { IoSettingsOutline, IoMapOutline, IoEyeOutline, IoLocationOutline } from "react-icons/io5";
+import { MdPets } from "react-icons/md";
 
 import { useTracker } from "../utils/TrackerContext";
 
@@ -34,6 +36,43 @@ import markerGold from "../assets/markers/marker-icon-gold.png";
 
 import ShowMyLocationToggle from "./ShowMyLocationToggle";
 import useMyLocation from "../utils/useMyLocation";
+import { subscribeToNearbyPets } from "../utils/nearbyPetsData";
+
+// PULSING ANIMATION
+const pulseAnimation = `
+  @keyframes pulse {
+    0% { 
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% { 
+      transform: scale(1.2);
+      opacity: 0.7;
+    }
+    100% { 
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideInDown {
+    0% {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.95);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+`;
+
+// CSS INJECTION
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = pulseAnimation;
+  document.head.appendChild(styleElement);
+}
 
 const markerIcons = [
   markerRed,
@@ -297,6 +336,37 @@ const GeomanControls = ({
 
 const MapView = ({ layoutMode = "mobile" }) => {
   const { devices, focusTracker } = useTracker();
+  
+  // Local state for nearby pets in MapView
+  const [nearbyPetsData, setNearbyPetsData] = useState(null);
+
+  // Subscribe to nearby pets events directly in MapView
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    const userId =
+      JSON.parse(storedUser || "{}")?.user_id ||
+      JSON.parse(storedUser || "{}")?.userId;
+
+    if (!userId) {
+      console.error("❌ Cannot subscribe to nearby pets: userId is required");
+      return;
+    }
+    
+    console.log('🐾 MapView: Setting up nearby pets subscription');
+    
+    const unsubscribeNearbyPets = subscribeToNearbyPets((data) => {
+      console.log('🐾 MapView: Nearby pets detected:', data);
+      setNearbyPetsData(data);
+      
+      // You can add visual indicators, notifications, or map updates here
+      // For example, show a popup, highlight areas, etc.
+    }, userId);
+
+    return () => {
+      console.log('🐾 MapView: Unsubscribing from nearby pets updates');
+      unsubscribeNearbyPets();
+    };
+  }, []);
 
   useEffect(() => {
     if (!devices || devices.length === 0) return;
@@ -342,6 +412,8 @@ const MapView = ({ layoutMode = "mobile" }) => {
   const [geofenceLayers, setGeofenceLayers] = useState([]);
   const [, setDistanceFromGeofence] = useState(null);
   const [showMapOptions, setShowMapOptions] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const mapOptionsRef = useRef(null);
 
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   const [pendingGeofence, setPendingGeofence] = useState(null);
@@ -357,6 +429,7 @@ const MapView = ({ layoutMode = "mobile" }) => {
   const isDeleteMode = useRef(false);
 
   const [myLocationEnabled, setMyLocationEnabled] = useState(false);
+  const [showNearbyPetsEnabled, setShowNearbyPetsEnabled] = useState(true);
 
   const {
     location: rawLocation,
@@ -716,13 +789,11 @@ const MapView = ({ layoutMode = "mobile" }) => {
 
   const mapRef = useRef(null);
 
-  // Handle focusing on tracker location
   useEffect(() => {
     if (focusTracker && focusTracker.coordinates && mapRef.current) {
       const map = mapRef.current;
       const { lat, lng } = focusTracker.coordinates;
       
-      // Animate to the tracker location with zoom level 18
       map.setView([lat, lng], 18, {
         animate: true,
         duration: 1.5
@@ -788,6 +859,41 @@ const MapView = ({ layoutMode = "mobile" }) => {
     };
   }, []);
 
+  // Click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (mapOptionsRef.current && !mapOptionsRef.current.contains(event.target)) {
+        if (showMapOptions) {
+          setIsAnimating(true);
+          setTimeout(() => {
+            setShowMapOptions(false);
+            setIsAnimating(false);
+          }, 200);
+        }
+      }
+    };
+
+    if (showMapOptions) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showMapOptions]);
+
+  const handleToggleMapOptions = () => {
+    if (showMapOptions) {
+      setIsAnimating(true);
+      setTimeout(() => {
+        setShowMapOptions(false);
+        setIsAnimating(false);
+      }, 200);
+    } else {
+      setShowMapOptions(true);
+    }
+  };
+
   return (
     <div
       style={{
@@ -823,27 +929,43 @@ const MapView = ({ layoutMode = "mobile" }) => {
           gap: "1rem",
         }}
       >
-        {/* LEFT SIDE: Map Options + Toggle */}
+        {/* LEFT SIDE: CONTROL PANEL */}
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          {/* Map Layers Button */}
-          <div style={{ position: "relative" }}>
+          {/* CONTROL PANEL BUTTON */}
+          <div style={{ position: "relative" }} ref={mapOptionsRef}>
             <button
-              onClick={() => setShowMapOptions((prev) => !prev)}
+              onClick={handleToggleMapOptions}
               style={{
                 background: "#fff",
                 border: "1px solid #ccc",
-                borderRadius: "20%",
-                width: "36px",
-                height: "36px",
+                borderRadius: "8px",
+                padding: "0.5rem 0.75rem",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 cursor: "pointer",
                 boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                fontSize: "0.75rem",
+                fontWeight: "500",
+                gap: "0.3rem",
+                transition: "all 0.2s ease",
               }}
-              title="Map Layers"
+              title="Map Controls"
+              onMouseEnter={(e) => {
+                e.target.style.background = "#f8f9fa";
+                e.target.style.borderColor = "#007bff";
+                e.target.style.boxShadow = "0 4px 8px rgba(0,123,255,0.15)";
+                e.target.style.transform = "translateY(-1px)";
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = "#fff";
+                e.target.style.borderColor = "#ccc";
+                e.target.style.boxShadow = "0 2px 4px rgba(0,0,0,0.1)";
+                e.target.style.transform = "translateY(0)";
+              }}
             >
-              &#8942;
+              <IoSettingsOutline size={14} />
+              Controls
             </button>
 
             {showMapOptions && (
@@ -855,102 +977,166 @@ const MapView = ({ layoutMode = "mobile" }) => {
                   background: "#fff",
                   border: "1px solid #ddd",
                   borderRadius: "8px",
-                  padding: "0.75rem",
+                  padding: "1rem",
                   display: "flex",
                   flexDirection: "column",
-                  gap: "0.5rem",
+                  gap: "0.75rem",
                   zIndex: 9999,
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                  minWidth: "180px",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                  minWidth: "220px",
+                  opacity: isAnimating ? 0 : 1,
+                  transform: isAnimating ? "translateY(-10px) scale(0.95)" : "translateY(0) scale(1)",
+                  transition: "all 0.2s ease-out",
+                  animation: !isAnimating ? "slideInDown 0.2s ease-out" : "none",
                 }}
               >
-                <div
-                  style={{
-                    fontSize: "0.8rem",
-                    fontWeight: "bold",
-                    color: "#333",
-                    marginBottom: "0.5rem",
-                    paddingLeft: "0.25rem",
-                  }}
-                >
-                  Select tile theme:
-                </div>
-
-                {Object.entries(tileLayers).map(([key, layer]) => (
+                {/* TILE THEME SELECTION SECTION */}
+                <div>
                   <div
-                    key={key}
-                    onClick={() => {
-                      setActiveTile(key);
-                      setShowMapOptions(false);
-                    }}
                     style={{
-                      cursor: "pointer",
-                      padding: "0.5rem 0.75rem",
-                      borderRadius: "6px",
-                      backgroundColor:
-                        key === activeTile ? "#fff3cd" : "transparent",
-                      border:
-                        key === activeTile
-                          ? "1px solid #c9aa3f"
-                          : "1px solid transparent",
-                      transition: "all 0.2s",
+                      fontSize: "0.8rem",
+                      fontWeight: "bold",
+                      color: "#333",
+                      marginBottom: "0.5rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
                     }}
                   >
-                    <div
-                      style={{
-                        fontWeight: "bold",
-                        fontSize: "0.9rem",
-                        color: "#666",
-                      }}
-                    >
-                      {layer.name}
-                    </div>
-                    <div style={{ fontSize: "0.75rem", color: "#666" }}>
-                      Max Zoom: {layer.maxZoom}
-                    </div>
+                    <IoMapOutline size={16} />
+                    Map Theme
                   </div>
-                ))}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                    {Object.entries(tileLayers).map(([key, layer]) => (
+                      <div
+                        key={key}
+                        onClick={() => {
+                          setActiveTile(key);
+                        }}
+                        style={{
+                          cursor: "pointer",
+                          padding: "0.4rem 0.6rem",
+                          borderRadius: "4px",
+                          backgroundColor:
+                            key === activeTile ? "#e3f2fd" : "transparent",
+                          border:
+                            key === activeTile
+                              ? "1px solid #2196f3"
+                              : "1px solid transparent",
+                          transition: "all 0.2s",
+                          fontSize: "0.75rem",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: key === activeTile ? "bold" : "normal",
+                            color: key === activeTile ? "#1976d2" : "#666",
+                            marginBottom: "2px",
+                          }}
+                        >
+                          {layer.name}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "0.65rem",
+                            color: "#999",
+                            fontStyle: "italic",
+                          }}
+                        >
+                          Max Zoom: {layer.maxZoom}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* DIVIDER */}
+                <div style={{ height: "1px", background: "#e0e0e0" }}></div>
+
+                {/* TOGGLE CONTOL SECTION */}
+                <div>
+                  <div
+                    style={{
+                      fontSize: "0.8rem",
+                      fontWeight: "bold",
+                      color: "#333",
+                      marginBottom: "0.5rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                    }}
+                  >
+                    <IoEyeOutline size={16} />
+                    Display Options
+                  </div>
+
+                  {/* SHOW MY LOCATION TOGGLE */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "0.4rem 0",
+                      fontSize: "0.75rem",
+                      color: "#555",
+                    }}
+                  >
+                    <span style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                      <IoLocationOutline size={14} />
+                      My Location
+                    </span>
+                    <ShowMyLocationToggle
+                      value={myLocationEnabled}
+                      onChange={(enabled) => {
+                        setMyLocationEnabled(enabled);
+                        if (enabled) {
+                          start();
+
+                          setTimeout(() => {
+                            if (locationError) {
+                              toast.error(
+                                "📍 Permission denied. Sharing location failed."
+                              );
+                              stop();
+                              setMyLocationEnabled(false);
+                            }
+                          }, 1000);
+                        } else {
+                          stop();
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* SHOW NEARBY PETS TOGGLE */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "0.4rem 0",
+                      fontSize: "0.75rem",
+                      color: "#555",
+                    }}
+                  >
+                    <span style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                      <MdPets size={14} />
+                      Nearby Pets
+                    </span>
+                    <ShowMyLocationToggle
+                      value={showNearbyPetsEnabled}
+                      onChange={(enabled) => {
+                        setShowNearbyPetsEnabled(enabled);
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
-
-          {/* Show My Location Toggle */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              color: "#fff",
-              fontSize: "0.85rem",
-              fontWeight: "bold",
-            }}
-          >
-            Show My Location
-            <ShowMyLocationToggle
-              value={myLocationEnabled}
-              onChange={(enabled) => {
-                setMyLocationEnabled(enabled);
-                if (enabled) {
-                  start();
-
-                  setTimeout(() => {
-                    if (locationError) {
-                      toast.error(
-                        "📍 Permission denied. Sharing location failed."
-                      );
-                      stop();
-                      setMyLocationEnabled(false);
-                    }
-                  }, 1000);
-                } else {
-                  stop();
-                }
-              }}
-            />
-          </div>
         </div>
 
-        {/* Clear Trail Button */}
+        {/* CLEAR TRAIL BUTTON */}
         <button
           onClick={handleClearTrail}
           style={{
@@ -1002,7 +1188,6 @@ const MapView = ({ layoutMode = "mobile" }) => {
           />
 
           {devices.map((device, index) => {
-            // Skip devices with invalid coordinates (like "waiting")
             const lat = typeof device.lat === "string" && isNaN(parseFloat(device.lat)) 
               ? null 
               : parseFloat(device.lat);
@@ -1010,7 +1195,6 @@ const MapView = ({ layoutMode = "mobile" }) => {
               ? null 
               : parseFloat(device.lng);
             
-            // Skip this device if coordinates are invalid
             if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
               console.log(`⚠️ Skipping marker for device ${device.deviceId} with invalid coordinates`);
               return null;
@@ -1070,22 +1254,38 @@ const MapView = ({ layoutMode = "mobile" }) => {
                   }}
                 >
                   <Popup offset={[0, -56]}>
-                    <div style={{ fontSize: "0.85rem", lineHeight: 1.4 }}>
+                    <div style={{ fontSize: "0.85rem", lineHeight: 1.4, minWidth: "200px" }}>
                       <div
                         style={{
                           fontWeight: "bold",
                           fontSize: "1rem",
-                          color: "#5c4033",
-                          marginBottom: "4px",
+                          color: "#2c5aa0",
+                          marginBottom: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px"
                         }}
                       >
-                        {device.petName || "Pet"}
+                        <MdPets size={16} color="#2c5aa0" /> {device.petName || "Pet"}
                       </div>
 
-                      <div>
-                        <strong>ID:</strong> {device.deviceId}
+                      <div style={{ marginBottom: "4px" }}>
+                        <strong>Device ID:</strong> {device.deviceId}
                       </div>
-                      <div>
+                      
+                      {device.petType && (
+                        <div style={{ marginBottom: "4px" }}>
+                          <strong>Type:</strong> {device.petType}
+                        </div>
+                      )}
+                      
+                      {device.petBreed && (
+                        <div style={{ marginBottom: "4px" }}>
+                          <strong>Breed:</strong> {device.petBreed}
+                        </div>
+                      )}
+
+                      <div style={{ marginBottom: "4px" }}>
                         <strong>Battery:</strong>{" "}
                         <span
                           style={{
@@ -1101,19 +1301,8 @@ const MapView = ({ layoutMode = "mobile" }) => {
                           {device.battery}%
                         </span>
                       </div>
-                      <div>
-                        <strong>Lat:</strong>{" "}
-                        {typeof device.lat === "number"
-                          ? device.lat.toFixed(4)
-                          : parseFloat(device.lat)?.toFixed(4) || "N/A"}
-                      </div>
-                      <div>
-                        <strong>Lng:</strong>{" "}
-                        {typeof device.lng === "number"
-                          ? device.lng.toFixed(4)
-                          : parseFloat(device.lng)?.toFixed(4) || "N/A"}
-                      </div>
-                      <div>
+                      
+                      <div style={{ marginBottom: "4px" }}>
                         <strong>Status:</strong>{" "}
                         <span
                           style={{
@@ -1123,6 +1312,28 @@ const MapView = ({ layoutMode = "mobile" }) => {
                         >
                           {device.online ? "Online" : "Offline"}
                         </span>
+                      </div>
+
+                      <div style={{ 
+                        marginTop: "8px", 
+                        padding: "6px 8px",
+                        backgroundColor: "#f8f9fa",
+                        borderRadius: "4px",
+                        border: "1px solid #e9ecef"
+                      }}>
+                        <div style={{ fontSize: "0.75rem", color: "#6c757d", marginBottom: "2px" }}>
+                          <strong>Coordinates:</strong>
+                        </div>
+                        <div style={{ fontSize: "0.75rem", color: "#495057" }}>
+                          Lat: {typeof device.lat === "number"
+                            ? device.lat.toFixed(4)
+                            : parseFloat(device.lat)?.toFixed(4) || "N/A"}
+                        </div>
+                        <div style={{ fontSize: "0.75rem", color: "#495057" }}>
+                          Lng: {typeof device.lng === "number"
+                            ? device.lng.toFixed(4)
+                            : parseFloat(device.lng)?.toFixed(4) || "N/A"}
+                        </div>
                       </div>
                     </div>
                   </Popup>
@@ -1180,6 +1391,170 @@ const MapView = ({ layoutMode = "mobile" }) => {
               opacity={0.6}
             />
           )}
+
+          {/* NEARBY PET VISUAL INDICATORS */}
+          {showNearbyPetsEnabled && nearbyPetsData && (() => {
+            const currentUserId = JSON.parse(localStorage.getItem("user") || "{}")?.user_id || 
+                                 JSON.parse(localStorage.getItem("user") || "{}")?.userId;
+            
+            if (!currentUserId) return null;
+
+            const nearbyPetsElements = [];
+
+            if (nearbyPetsData.type === 'grouped' && nearbyPetsData.ownerGroups) {
+              Object.entries(nearbyPetsData.ownerGroups).forEach(([userId, userPets]) => {
+                if (parseInt(userId) === parseInt(currentUserId)) return;
+                
+                userPets.forEach((pet) => {
+                  const lat = parseFloat(pet.lat);
+                  const lng = parseFloat(pet.lng);
+                  
+                  if (isNaN(lat) || isNaN(lng)) return;
+
+                  const pos = [lat, lng];
+
+                  nearbyPetsElements.push(
+                    <div key={`nearby-pet-${userId}-${pet.deviceId}`}>
+                      <Marker
+                        position={pos}
+                        icon={L.divIcon({
+                          html: `
+                            <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+                              <div style="
+                                position: absolute;
+                                top: -35px;
+                                background: rgba(255, 107, 107, 0.9);
+                                color: #fff;
+                                padding: 3px 8px;
+                                border-radius: 5px;
+                                font-size: 0.7rem;
+                                font-weight: bold;
+                                white-space: nowrap;
+                                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                                z-index: 15;
+                                border: 1px solid #ff6b6b;
+                              ">
+                                🐾 ${pet.petName} (Nearby)
+                              </div>
+                              <div style="
+                                width: 30px;
+                                height: 30px;
+                                background: #ff6b6b;
+                                border: 3px solid #fff;
+                                border-radius: 50%;
+                                box-shadow: 0 2px 8px rgba(255, 107, 107, 0.6);
+                                animation: pulse 2s infinite;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                font-size: 16px;
+                              ">
+                                🐾
+                              </div>
+                            </div>
+                          `,
+                          className: "",
+                          iconSize: [36, 50],
+                          iconAnchor: [18, 25],
+                        })}
+                      >
+                        <Popup offset={[0, -56]}>
+                          <div style={{ fontSize: "0.85rem", lineHeight: 1.4, minWidth: "200px" }}>
+                            <div style={{ fontWeight: "bold", fontSize: "1rem", color: "#ff6b6b", marginBottom: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
+                              <MdPets size={16} color="#ff6b6b" /> {pet.petName} (Nearby Pet)
+                            </div>
+                            <div><strong>Device:</strong> {pet.deviceId}</div>
+                            <div><strong>Owner:</strong> {pet.owner?.ownerName}</div>
+                            <div><strong>Type:</strong> {pet.petType || 'Unknown'}</div>
+                            <div><strong>Breed:</strong> {pet.petBreed || 'Unknown'}</div>
+                            <div style={{ marginTop: "8px", fontSize: "0.8rem", fontStyle: "italic", color: "#666" }}>
+                              This pet is nearby your pet!
+                            </div>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    </div>
+                  );
+                });
+              });
+            } else if (nearbyPetsData.type === 'individual' && nearbyPetsData.pets) {
+              nearbyPetsData.pets.forEach((pet) => {
+                if (parseInt(pet.userId) === parseInt(currentUserId)) return;
+                
+                const lat = parseFloat(pet.lat);
+                const lng = parseFloat(pet.lng);
+                
+                if (isNaN(lat) || isNaN(lng)) return;
+
+                const pos = [lat, lng];
+
+                nearbyPetsElements.push(
+                  <div key={`nearby-individual-pet-${pet.userId}-${pet.deviceId}`}>
+                    <Marker
+                      position={pos}
+                      icon={L.divIcon({
+                        html: `
+                          <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+                            <div style="
+                              position: absolute;
+                              top: -35px;
+                              background: rgba(255, 107, 107, 0.9);
+                              color: #fff;
+                              padding: 3px 8px;
+                              border-radius: 5px;
+                              font-size: 0.7rem;
+                              font-weight: bold;
+                              white-space: nowrap;
+                              box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                              z-index: 15;
+                              border: 1px solid #ff6b6b;
+                            ">
+                              🐾 ${pet.petName} (Nearby)
+                            </div>
+                            <div style="
+                              width: 30px;
+                              height: 30px;
+                              background: #ff6b6b;
+                              border: 3px solid #fff;
+                              border-radius: 50%;
+                              box-shadow: 0 2px 8px rgba(255, 107, 107, 0.6);
+                              animation: pulse 2s infinite;
+                              display: flex;
+                              align-items: center;
+                              justify-content: center;
+                              font-size: 16px;
+                            ">
+                              🐾
+                            </div>
+                          </div>
+                        `,
+                        className: "",
+                        iconSize: [36, 50],
+                        iconAnchor: [18, 25],
+                      })}
+                    >
+                      <Popup offset={[0, -56]}>
+                        <div style={{ fontSize: "0.85rem", lineHeight: 1.4, minWidth: "200px" }}>
+                          <div style={{ fontWeight: "bold", fontSize: "1rem", color: "#ff6b6b", marginBottom: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <MdPets size={16} color="#ff6b6b" /> {pet.petName} (Nearby Pet)
+                          </div>
+                          <div><strong>Device:</strong> {pet.deviceId}</div>
+                          <div><strong>Owner:</strong> {pet.ownerName || `User ${pet.userId}`}</div>
+                          <div><strong>Type:</strong> {pet.petType || 'Unknown'}</div>
+                          <div><strong>Breed:</strong> {pet.petBreed || 'Unknown'}</div>
+                          <div style={{ marginTop: "8px", fontSize: "0.8rem", fontStyle: "italic", color: "#666" }}>
+                            This pet is nearby your pet!
+                          </div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  </div>
+                );
+              });
+            }
+            
+            return nearbyPetsElements;
+          })()}
         </MapContainer>
       ) : (
         <div
@@ -1362,7 +1737,6 @@ const MapView = ({ layoutMode = "mobile" }) => {
               );
             }
 
-            // Remove all matching layers
             if (geofenceLayers?.length > 0 && mapRef.current) {
               const toRemove = geofenceLayers.filter((layer) => {
                 if (

@@ -3,9 +3,21 @@ import io from 'socket.io-client';
 const BACKEND_URL = import.meta.env.VITE_SOCKET_API;
 let socket = null;
 
-export const initializeSocket = () => {
+export const initializeSocket = (userId) => {
   if (!socket) {
+    // Get userId from parameter or localStorage
+    const storedUser = localStorage.getItem("user");
+    const finalUserId = userId || 
+      JSON.parse(storedUser || "{}")?.user_id ||
+      JSON.parse(storedUser || "{}")?.userId;
+
+    if (!finalUserId) {
+      console.error("❌ Cannot initialize socket: userId is required");
+      return null;
+    }
+
     socket = io(BACKEND_URL, {
+      query: { userId: finalUserId },
       secure: true,
       transports: ['polling', 'websocket'],
       reconnection: true,
@@ -26,8 +38,8 @@ export const initializeSocket = () => {
   return socket;
 };
 
-export const subscribeToNotifications = (callback) => {
-  if (!socket) initializeSocket();
+export const subscribeToNotifications = (callback, userId = null) => {
+  if (!socket) initializeSocket(userId);
   
   // Load audio files
   const alertSound = new Audio('/assets/notificationSounds/alert_sound.wav');

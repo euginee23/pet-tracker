@@ -15,7 +15,7 @@ export const TrackerProvider = ({ children }) => {
   return (
     <TrackerContext.Provider value={{ 
       devices, 
-      setDevices, 
+      setDevices,
       focusTracker, 
       focusOnTracker 
     }}>

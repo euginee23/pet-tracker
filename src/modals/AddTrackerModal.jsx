@@ -68,7 +68,19 @@ const AddTrackerModal = ({ onClose, onConfirm }) => {
   ];
 
   useEffect(() => {
-    socketRef.current = io(import.meta.env.VITE_SOCKET_API);
+    const storedUser = localStorage.getItem("user");
+    const finalUserId =
+      JSON.parse(storedUser || "{}")?.user_id ||
+      JSON.parse(storedUser || "{}")?.userId;
+
+    if (!finalUserId) {
+      console.error("❌ Cannot initialize socket: userId is required");
+      return;
+    }
+
+    socketRef.current = io(import.meta.env.VITE_SOCKET_API, {
+      query: { userId: finalUserId }
+    });
     socketRef.current.on("devices", (deviceList) => {
       setAllDevices(deviceList);
     });
