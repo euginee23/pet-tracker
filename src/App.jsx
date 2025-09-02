@@ -15,6 +15,7 @@ import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import EmailVerification from "./pages/EmailVerification";
+import ForgotPassword from "./pages/ForgotPassword";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Navbar from "./components/Navbar";
@@ -39,7 +40,7 @@ function App() {
     const isAuth = checkAuth();
     setIsAuthenticated(isAuth);
 
-    const publicPaths = ["/", "/register", "/verify-email"];
+    const publicPaths = ["/", "/register", "/verify-email", "/forgot-password"];
     if (!isAuth && !publicPaths.includes(location.pathname)) {
       navigate("/");
     } else if (isAuth && location.pathname === "/") {
@@ -329,7 +330,7 @@ function App() {
       </div>
       {/* Show Navbar only for authenticated users and protected pages */}
       {isAuthenticated &&
-        !["/", "/register", "/verify-email"].includes(location.pathname) && (
+        !["/", "/register", "/verify-email", "/forgot-password"].includes(location.pathname) && (
           <Navbar onLogout={handleLogout} />
         )}
 
@@ -358,6 +359,14 @@ function App() {
               <VerifyEmailRoute>
                 <EmailVerification />
               </VerifyEmailRoute>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <AuthRedirect>
+                <ForgotPassword />
+              </AuthRedirect>
             }
           />
           <Route
