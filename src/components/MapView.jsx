@@ -155,6 +155,7 @@ const GeomanControls = ({
       editMode: false,
       cutPolygon: false,
       rotateMode: false,
+      dragMode: false,
     });
 
     map.on("pm:globalremoveenabled", () => {

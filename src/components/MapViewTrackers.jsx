@@ -11,17 +11,6 @@ import {
   disconnectSocket
 } from "../utils/deviceData";
 
-function formatDuration(ms) {
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
-}
-
 const CHECK_INTERVAL = 10000;
 
 const MapViewTrackers = ({ layoutMode = "mobile" }) => {
@@ -36,8 +25,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
 
   const firstSeenRef = useRef({});
   const lastKnownPositionsRef = useRef({});
-  
-  // Refs to store current values without causing re-renders
+
   const savedTrackersRef = useRef([]);
   const visibleTrackerIdsRef = useRef([]);
 
@@ -46,8 +34,20 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
   const [savedReady, setSavedReady] = useState(false);
   const [socketReady, setSocketReady] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
-  const loading = !savedReady; // Only wait for saved trackers to be loaded
+  const loading = !savedReady; 
   const [savedTrackers, setSavedTrackers] = useState([]);
+
+  // Get account_type from localStorage user object
+  let accountType = null;
+  try {
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const parsed = JSON.parse(storedUser);
+      accountType = parsed.account_type || parsed.accountType || null;
+    }
+  } catch (e) {
+    accountType = null;
+  }
 
   const GRADIENTS = [
     `radial-gradient(circle at 20% 30%, #b3e5fc, transparent 50%),
@@ -86,7 +86,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
 
     if (!userId) {
       console.warn("⚠️ No user ID found, cannot load trackers");
-      setSavedReady(true); // Mark as ready even though we have no data
+      setSavedReady(true);
       return;
     }
 
@@ -379,7 +379,7 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
           borderTopLeftRadius: "10px",
           borderTopRightRadius: "10px",
           display: "flex",
-          justifyContent: "space-between",
+          justifyContent: accountType === "User" ? "center" : "space-between",
           alignItems: "center",
           fontWeight: "600",
           fontSize: "0.95rem",
@@ -391,36 +391,38 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
           Your Trackers
         </span>
 
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button
-            onClick={() => toggleSimulation(true)}
-            style={{
-              padding: "2px 8px",
-              fontSize: "0.75rem",
-              backgroundColor: "#2e7d32",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            Start
-          </button>
-          <button
-            onClick={() => toggleSimulation(false)}
-            style={{
-              padding: "2px 8px",
-              fontSize: "0.75rem",
-              backgroundColor: "#c62828",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            Stop
-          </button>
-        </div>
+        {accountType !== "User" && (
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              onClick={() => toggleSimulation(true)}
+              style={{
+                padding: "2px 8px",
+                fontSize: "0.75rem",
+                backgroundColor: "#2e7d32",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+              }}
+            >
+              Start
+            </button>
+            <button
+              onClick={() => toggleSimulation(false)}
+              style={{
+                padding: "2px 8px",
+                fontSize: "0.75rem",
+                backgroundColor: "#c62828",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+              }}
+            >
+              Stop
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Devices List */}
@@ -615,8 +617,15 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
                   </div>
 
                   <div style={{ fontSize: "0.78rem", marginTop: "0.6rem" }}>
-                    <div>
-                      <strong>ID:</strong> {device.deviceId}
+                    <div style={{
+                      maxWidth: '110px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      display: 'inline-block',
+                      verticalAlign: 'bottom',
+                    }}>
+                      <strong>ID:</strong> <span title={device.deviceId}>{device.deviceId}</span>
                     </div>
                     <div>
                       <strong>Lat:</strong>{" "}
