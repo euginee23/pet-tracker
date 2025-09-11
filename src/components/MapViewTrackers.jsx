@@ -629,13 +629,17 @@ const MapViewTrackers = ({ layoutMode = "mobile" }) => {
                     </div>
                     <div>
                       <strong>Lat:</strong>{" "}
-                      {typeof device.lat === "number"
+                      {typeof device.lat === "string" && device.lat === "waiting" 
+                        ? "Waiting for GPS fix" 
+                        : typeof device.lat === "number"
                         ? device.lat.toFixed(4)
                         : parseFloat(device.lat)?.toFixed(4) || "N/A"}
                     </div>
                     <div>
                       <strong>Lng:</strong>{" "}
-                      {typeof device.lng === "number"
+                      {typeof device.lng === "string" && device.lng === "waiting" 
+                        ? "Waiting for GPS fix" 
+                        : typeof device.lng === "number"
                         ? device.lng.toFixed(4)
                         : parseFloat(device.lng)?.toFixed(4) || "N/A"}
                     </div>

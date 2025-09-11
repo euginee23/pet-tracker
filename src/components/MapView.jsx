@@ -375,9 +375,8 @@ const MapView = ({ layoutMode = "mobile" }) => {
     // Filter devices with valid coordinates
     const validDevices = devices
       .map((d) => {
-        // Check if lat/lng are strings like "waiting" or valid numbers
-        const lat = typeof d.lat === "string" && isNaN(parseFloat(d.lat)) ? null : parseFloat(d.lat);
-        const lng = typeof d.lng === "string" && isNaN(parseFloat(d.lng)) ? null : parseFloat(d.lng);
+        const lat = typeof d.lat === "string" && (d.lat === "waiting" || isNaN(parseFloat(d.lat))) ? null : parseFloat(d.lat);
+        const lng = typeof d.lng === "string" && (d.lng === "waiting" || isNaN(parseFloat(d.lng))) ? null : parseFloat(d.lng);
         
         return {
           lat,
@@ -660,16 +659,16 @@ const MapView = ({ layoutMode = "mobile" }) => {
 
       devices.forEach((device) => {
         // Validate coordinates
-        const lat = typeof device.lat === "string" && isNaN(parseFloat(device.lat)) 
+        const lat = typeof device.lat === "string" && (device.lat === "waiting" || isNaN(parseFloat(device.lat))) 
           ? null 
           : parseFloat(device.lat);
-        const lng = typeof device.lng === "string" && isNaN(parseFloat(device.lng)) 
+        const lng = typeof device.lng === "string" && (device.lng === "waiting" || isNaN(parseFloat(device.lng))) 
           ? null 
           : parseFloat(device.lng);
         
         // Skip invalid coordinates
         if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
-          console.log(`⚠️ Skipping path update for device ${device.deviceId} with invalid coordinates`);
+          console.log(`⚠️ Skipping path update for device ${device.deviceId} with invalid coordinates (lat: ${device.lat}, lng: ${device.lng})`);
           return;
         }
         
@@ -694,16 +693,16 @@ const MapView = ({ layoutMode = "mobile" }) => {
     if (geofenceLayers.length > 0) {
       devices.forEach((device) => {
         // Validate coordinates
-        const lat = typeof device.lat === "string" && isNaN(parseFloat(device.lat)) 
+        const lat = typeof device.lat === "string" && (device.lat === "waiting" || isNaN(parseFloat(device.lat))) 
           ? null 
           : parseFloat(device.lat);
-        const lng = typeof device.lng === "string" && isNaN(parseFloat(device.lng)) 
+        const lng = typeof device.lng === "string" && (device.lng === "waiting" || isNaN(parseFloat(device.lng))) 
           ? null 
           : parseFloat(device.lng);
         
         // Skip invalid coordinates
         if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
-          console.log(`⚠️ Skipping geofence check for device ${device.deviceId} with invalid coordinates`);
+          console.log(`⚠️ Skipping geofence check for device ${device.deviceId} with invalid coordinates (lat: ${device.lat}, lng: ${device.lng})`);
           return;
         }
         
@@ -1189,15 +1188,15 @@ const MapView = ({ layoutMode = "mobile" }) => {
           />
 
           {devices.map((device, index) => {
-            const lat = typeof device.lat === "string" && isNaN(parseFloat(device.lat)) 
+            const lat = typeof device.lat === "string" && (device.lat === "waiting" || isNaN(parseFloat(device.lat))) 
               ? null 
               : parseFloat(device.lat);
-            const lng = typeof device.lng === "string" && isNaN(parseFloat(device.lng)) 
+            const lng = typeof device.lng === "string" && (device.lng === "waiting" || isNaN(parseFloat(device.lng))) 
               ? null 
               : parseFloat(device.lng);
             
             if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
-              console.log(`⚠️ Skipping marker for device ${device.deviceId} with invalid coordinates`);
+              console.log(`⚠️ Skipping marker for device ${device.deviceId} with invalid coordinates (lat: ${device.lat}, lng: ${device.lng})`);
               return null;
             }
             
@@ -1326,12 +1325,16 @@ const MapView = ({ layoutMode = "mobile" }) => {
                           <strong>Coordinates:</strong>
                         </div>
                         <div style={{ fontSize: "0.75rem", color: "#495057" }}>
-                          Lat: {typeof device.lat === "number"
+                          Lat: {typeof device.lat === "string" && device.lat === "waiting" 
+                            ? "Waiting for GPS fix" 
+                            : typeof device.lat === "number"
                             ? device.lat.toFixed(4)
                             : parseFloat(device.lat)?.toFixed(4) || "N/A"}
                         </div>
                         <div style={{ fontSize: "0.75rem", color: "#495057" }}>
-                          Lng: {typeof device.lng === "number"
+                          Lng: {typeof device.lng === "string" && device.lng === "waiting" 
+                            ? "Waiting for GPS fix" 
+                            : typeof device.lng === "number"
                             ? device.lng.toFixed(4)
                             : parseFloat(device.lng)?.toFixed(4) || "N/A"}
                         </div>
